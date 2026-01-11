@@ -6,6 +6,13 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.util.Log
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,6 +57,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -139,6 +147,8 @@ fun ChatScreen(
     val chatBubbleScrollStates = rememberSaveable(saver = multiScrollStateSaver) { DefaultHashMap<Int, ScrollState> { ScrollState(0) } }
     val canEnableAICoreMode = rememberSaveable { checkAICoreAvailability(aiCorePackageInfo, privateComputePackageInfo) }
     val context = LocalContext.current
+    
+    val isBarsVisible by remember { derivedStateOf { !listState.isScrollInProgress } }
 
     val scope = rememberCoroutineScope()
 
@@ -162,24 +172,36 @@ fun ChatScreen(
                 interactionSource = remember { MutableInteractionSource() }
             ) { focusManager.clearFocus() },
         topBar = {
-            ChatTopBar(
-                chatRoom.title,
-                chatRoom.id > 0,
-                onBackAction,
-                scrollBehavior,
-                chatViewModel::openChatTitleDialog,
-                onExportChatItemClick = { exportChat(context, chatViewModel) }
-            )
+            AnimatedVisibility(
+                visible = isBarsVisible,
+                enter = slideInVertically(initialOffsetY = { -it }) + expandVertically(expandFrom = Alignment.Top) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
+            ) {
+                ChatTopBar(
+                    chatRoom.title,
+                    chatRoom.id > 0,
+                    onBackAction,
+                    scrollBehavior,
+                    chatViewModel::openChatTitleDialog,
+                    onExportChatItemClick = { exportChat(context, chatViewModel) }
+                )
+            }
         },
         bottomBar = {
-            ChatInputBox(
-                value = question,
-                onValueChange = { s -> chatViewModel.updateQuestion(s) },
-                chatEnabled = canUseChat,
-                sendButtonEnabled = question.trim().isNotBlank() && isIdle
+            AnimatedVisibility(
+                visible = isBarsVisible,
+                enter = slideInVertically(initialOffsetY = { it }) + expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
             ) {
-                chatViewModel.askQuestion()
-                focusManager.clearFocus()
+                ChatInputBox(
+                    value = question,
+                    onValueChange = { s -> chatViewModel.updateQuestion(s) },
+                    chatEnabled = canUseChat,
+                    sendButtonEnabled = question.trim().isNotBlank() && isIdle
+                ) {
+                    chatViewModel.askQuestion()
+                    focusManager.clearFocus()
+                }
             }
         },
         floatingActionButton = {
