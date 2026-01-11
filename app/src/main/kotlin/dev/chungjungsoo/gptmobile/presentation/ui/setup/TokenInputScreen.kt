@@ -69,6 +69,7 @@ fun TokenInputScreen(
             TokenInput(
                 platforms = platformState,
                 onChangeEvent = { platform, s -> setupViewModel.updateToken(platform, s) },
+                onUrlChangeEvent = { platform, s -> setupViewModel.updateAPIAddress(platform, s) },
                 onClearEvent = { platform -> setupViewModel.updateToken(platform, "") }
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -118,6 +119,7 @@ fun TokenInput(
     modifier: Modifier = Modifier,
     platforms: List<Platform> = listOf(),
     onChangeEvent: (Platform, String) -> Unit = { _, _ -> },
+    onUrlChangeEvent: (Platform, String) -> Unit = { _, _ -> },
     onClearEvent: (Platform) -> Unit = {}
 ) {
     val labels = getPlatformAPILabelResources()
@@ -132,9 +134,23 @@ fun TokenInput(
                 onValueChange = { onChangeEvent(platform, it) },
                 onClearClick = { onClearEvent(platform) },
                 label = labels[platform.name]!!,
-                keyboardOptions = KeyboardOptions(imeAction = if (isLast) ImeAction.Done else ImeAction.Next),
+                keyboardOptions = KeyboardOptions(imeAction = if (isLast && platform.name != ApiType.OPENAI) ImeAction.Done else ImeAction.Next),
                 helpLink = helpLinks[platform.name]!!
             )
+            
+            if (platform.name == ApiType.OPENAI) {
+                androidx.compose.material3.OutlinedTextField(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                    value = platform.apiUrl,
+                    onValueChange = { onUrlChangeEvent(platform, it) },
+                    label = { Text(stringResource(R.string.api_url)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = if (isLast) ImeAction.Done else ImeAction.Next),
+                    placeholder = { Text("https://api.openai.com/v1/") }
+                )
+            }
         }
     }
 }
