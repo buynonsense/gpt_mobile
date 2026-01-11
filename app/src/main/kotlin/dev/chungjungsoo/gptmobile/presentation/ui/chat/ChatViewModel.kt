@@ -11,6 +11,8 @@ import dev.chungjungsoo.gptmobile.data.dto.ApiState
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.repository.ChatRepository
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
+import dev.chungjungsoo.gptmobile.util.IncrementalMarkdownParser
+import dev.chungjungsoo.gptmobile.util.MarkdownBlock
 import dev.chungjungsoo.gptmobile.util.handleStates
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -121,6 +123,83 @@ class ChatViewModel @Inject constructor(
     private val ollamaFlow = MutableSharedFlow<ApiState>()
     private val geminiNanoFlow = MutableSharedFlow<ApiState>()
 
+    // --- 流式渲染优化：增量分块（incremark 模式） ---
+    private class StreamingMarkdownAccumulator {
+        private val builder = StringBuilder()
+        private val parser = IncrementalMarkdownParser()
+
+        fun reset() {
+            builder.clear()
+            parser.reset()
+        }
+
+        fun append(chunk: String): List<MarkdownBlock> {
+            builder.append(chunk)
+            return parser.append(chunk).allBlocks
+        }
+
+        fun buildFinalText(): String = builder.toString()
+    }
+
+    private val openAIAccumulator = StreamingMarkdownAccumulator()
+    private val anthropicAccumulator = StreamingMarkdownAccumulator()
+    private val googleAccumulator = StreamingMarkdownAccumulator()
+    private val groqAccumulator = StreamingMarkdownAccumulator()
+    private val ollamaAccumulator = StreamingMarkdownAccumulator()
+    private val geminiNanoAccumulator = StreamingMarkdownAccumulator()
+
+    private val _openAIMarkdownBlocks = MutableStateFlow<List<MarkdownBlock>>(emptyList())
+    val openAIMarkdownBlocks = _openAIMarkdownBlocks.asStateFlow()
+
+    private val _anthropicMarkdownBlocks = MutableStateFlow<List<MarkdownBlock>>(emptyList())
+    val anthropicMarkdownBlocks = _anthropicMarkdownBlocks.asStateFlow()
+
+    private val _googleMarkdownBlocks = MutableStateFlow<List<MarkdownBlock>>(emptyList())
+    val googleMarkdownBlocks = _googleMarkdownBlocks.asStateFlow()
+
+    private val _groqMarkdownBlocks = MutableStateFlow<List<MarkdownBlock>>(emptyList())
+    val groqMarkdownBlocks = _groqMarkdownBlocks.asStateFlow()
+
+    private val _ollamaMarkdownBlocks = MutableStateFlow<List<MarkdownBlock>>(emptyList())
+    val ollamaMarkdownBlocks = _ollamaMarkdownBlocks.asStateFlow()
+
+    private val _geminiNanoMarkdownBlocks = MutableStateFlow<List<MarkdownBlock>>(emptyList())
+    val geminiNanoMarkdownBlocks = _geminiNanoMarkdownBlocks.asStateFlow()
+
+    private fun resetStreamState(apiType: ApiType) {
+        when (apiType) {
+            ApiType.OPENAI -> {
+                openAIAccumulator.reset()
+                _openAIMarkdownBlocks.update { emptyList() }
+                _openAIMessage.update { it.copy(content = "") }
+            }
+
+            ApiType.ANTHROPIC -> {
+                anthropicAccumulator.reset()
+                _anthropicMarkdownBlocks.update { emptyList() }
+                _anthropicMessage.update { it.copy(content = "") }
+            }
+
+            ApiType.GOOGLE -> {
+                googleAccumulator.reset()
+                _googleMarkdownBlocks.update { emptyList() }
+                _googleMessage.update { it.copy(content = "") }
+            }
+
+            ApiType.GROQ -> {
+                groqAccumulator.reset()
+                _groqMarkdownBlocks.update { emptyList() }
+                _groqMessage.update { it.copy(content = "") }
+            }
+
+            ApiType.OLLAMA -> {
+                ollamaAccumulator.reset()
+                _ollamaMarkdownBlocks.update { emptyList() }
+                _ollamaMessage.update { it.copy(content = "") }
+            }
+        }
+    }
+
     init {
         Log.d("ViewModel", "$chatRoomId")
         Log.d("ViewModel", "$enabledPlatformsInChat")
@@ -188,6 +267,8 @@ class ChatViewModel @Inject constructor(
             }
         }
         message.platformType?.let { updateLoadingState(it, LoadingState.Loading) }
+
+        message.platformType?.let { resetStreamState(it) }
 
         when (message.platformType) {
             ApiType.OPENAI -> {
@@ -270,6 +351,20 @@ class ChatViewModel @Inject constructor(
         _googleMessage.update { it.copy(id = 0, content = "") }
         _groqMessage.update { it.copy(id = 0, content = "") }
         _ollamaMessage.update { it.copy(id = 0, content = "") }
+
+        // 清理增量渲染状态
+        openAIAccumulator.reset()
+        anthropicAccumulator.reset()
+        googleAccumulator.reset()
+        groqAccumulator.reset()
+        ollamaAccumulator.reset()
+        geminiNanoAccumulator.reset()
+        _openAIMarkdownBlocks.update { emptyList() }
+        _anthropicMarkdownBlocks.update { emptyList() }
+        _googleMarkdownBlocks.update { emptyList() }
+        _groqMarkdownBlocks.update { emptyList() }
+        _ollamaMarkdownBlocks.update { emptyList() }
+        _geminiNanoMarkdownBlocks.update { emptyList() }
     }
 
     private fun completeChat() {
@@ -277,22 +372,27 @@ class ChatViewModel @Inject constructor(
         val enabledPlatforms = enabledPlatformsInChat.toSet()
 
         if (ApiType.OPENAI in enabledPlatforms) {
+            resetStreamState(ApiType.OPENAI)
             completeOpenAIChat()
         }
 
         if (ApiType.ANTHROPIC in enabledPlatforms) {
+            resetStreamState(ApiType.ANTHROPIC)
             completeAnthropicChat()
         }
 
         if (ApiType.GOOGLE in enabledPlatforms) {
+            resetStreamState(ApiType.GOOGLE)
             completeGoogleChat()
         }
 
         if (ApiType.GROQ in enabledPlatforms) {
+            resetStreamState(ApiType.GROQ)
             completeGroqChat()
         }
 
         if (ApiType.OLLAMA in enabledPlatforms) {
+            resetStreamState(ApiType.OLLAMA)
             completeOllamaChat()
         }
     }
@@ -371,42 +471,94 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             openAIFlow.handleStates(
                 messageFlow = _openAIMessage,
-                onLoadingComplete = { updateLoadingState(ApiType.OPENAI, LoadingState.Idle) }
+                onLoadingComplete = { updateLoadingState(ApiType.OPENAI, LoadingState.Idle) },
+                onTextChunk = { chunk -> _openAIMarkdownBlocks.update { openAIAccumulator.append(chunk) } },
+                onDone = {
+                    _openAIMessage.update { it.copy(content = openAIAccumulator.buildFinalText(), createdAt = currentTimeStamp) }
+                },
+                onError = { error ->
+                    _openAIMarkdownBlocks.update { emptyList() }
+                    openAIAccumulator.reset()
+                    _openAIMessage.update { it.copy(content = "Error: $error", createdAt = currentTimeStamp) }
+                }
             )
         }
 
         viewModelScope.launch {
             anthropicFlow.handleStates(
                 messageFlow = _anthropicMessage,
-                onLoadingComplete = { updateLoadingState(ApiType.ANTHROPIC, LoadingState.Idle) }
+                onLoadingComplete = { updateLoadingState(ApiType.ANTHROPIC, LoadingState.Idle) },
+                onTextChunk = { chunk -> _anthropicMarkdownBlocks.update { anthropicAccumulator.append(chunk) } },
+                onDone = {
+                    _anthropicMessage.update { it.copy(content = anthropicAccumulator.buildFinalText(), createdAt = currentTimeStamp) }
+                },
+                onError = { error ->
+                    _anthropicMarkdownBlocks.update { emptyList() }
+                    anthropicAccumulator.reset()
+                    _anthropicMessage.update { it.copy(content = "Error: $error", createdAt = currentTimeStamp) }
+                }
             )
         }
 
         viewModelScope.launch {
             googleFlow.handleStates(
                 messageFlow = _googleMessage,
-                onLoadingComplete = { updateLoadingState(ApiType.GOOGLE, LoadingState.Idle) }
+                onLoadingComplete = { updateLoadingState(ApiType.GOOGLE, LoadingState.Idle) },
+                onTextChunk = { chunk -> _googleMarkdownBlocks.update { googleAccumulator.append(chunk) } },
+                onDone = {
+                    _googleMessage.update { it.copy(content = googleAccumulator.buildFinalText(), createdAt = currentTimeStamp) }
+                },
+                onError = { error ->
+                    _googleMarkdownBlocks.update { emptyList() }
+                    googleAccumulator.reset()
+                    _googleMessage.update { it.copy(content = "Error: $error", createdAt = currentTimeStamp) }
+                }
             )
         }
 
         viewModelScope.launch {
             groqFlow.handleStates(
                 messageFlow = _groqMessage,
-                onLoadingComplete = { updateLoadingState(ApiType.GROQ, LoadingState.Idle) }
+                onLoadingComplete = { updateLoadingState(ApiType.GROQ, LoadingState.Idle) },
+                onTextChunk = { chunk -> _groqMarkdownBlocks.update { groqAccumulator.append(chunk) } },
+                onDone = {
+                    _groqMessage.update { it.copy(content = groqAccumulator.buildFinalText(), createdAt = currentTimeStamp) }
+                },
+                onError = { error ->
+                    _groqMarkdownBlocks.update { emptyList() }
+                    groqAccumulator.reset()
+                    _groqMessage.update { it.copy(content = "Error: $error", createdAt = currentTimeStamp) }
+                }
             )
         }
 
         viewModelScope.launch {
             ollamaFlow.handleStates(
                 messageFlow = _ollamaMessage,
-                onLoadingComplete = { updateLoadingState(ApiType.OLLAMA, LoadingState.Idle) }
+                onLoadingComplete = { updateLoadingState(ApiType.OLLAMA, LoadingState.Idle) },
+                onTextChunk = { chunk -> _ollamaMarkdownBlocks.update { ollamaAccumulator.append(chunk) } },
+                onDone = {
+                    _ollamaMessage.update { it.copy(content = ollamaAccumulator.buildFinalText(), createdAt = currentTimeStamp) }
+                },
+                onError = { error ->
+                    _ollamaMarkdownBlocks.update { emptyList() }
+                    ollamaAccumulator.reset()
+                    _ollamaMessage.update { it.copy(content = "Error: $error", createdAt = currentTimeStamp) }
+                }
             )
         }
 
         viewModelScope.launch {
             geminiNanoFlow.handleStates(
                 messageFlow = _geminiNanoMessage,
-                onLoadingComplete = { _geminiNanoLoadingState.update { LoadingState.Idle } }
+                onLoadingComplete = { _geminiNanoLoadingState.update { LoadingState.Idle } },
+                onTextChunk = { chunk -> _geminiNanoMarkdownBlocks.update { geminiNanoAccumulator.append(chunk) } },
+                onDone = {
+                    _geminiNanoMessage.update { it.copy(content = geminiNanoAccumulator.buildFinalText(), createdAt = currentTimeStamp) }
+                },
+                onError = { error ->
+                    _geminiNanoMessage.update { it.copy(content = "Error: $error", createdAt = currentTimeStamp) }
+                }
             )
         }
 

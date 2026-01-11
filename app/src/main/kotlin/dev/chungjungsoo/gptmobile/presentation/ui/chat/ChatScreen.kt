@@ -142,6 +142,12 @@ fun ChatScreen(
     val groqMessage by chatViewModel.groqMessage.collectAsStateWithLifecycle()
     val ollamaMessage by chatViewModel.ollamaMessage.collectAsStateWithLifecycle()
     val geminiNano by chatViewModel.geminiNanoMessage.collectAsStateWithLifecycle()
+
+    val openAIMarkdownBlocks by chatViewModel.openAIMarkdownBlocks.collectAsStateWithLifecycle()
+    val anthropicMarkdownBlocks by chatViewModel.anthropicMarkdownBlocks.collectAsStateWithLifecycle()
+    val googleMarkdownBlocks by chatViewModel.googleMarkdownBlocks.collectAsStateWithLifecycle()
+    val groqMarkdownBlocks by chatViewModel.groqMarkdownBlocks.collectAsStateWithLifecycle()
+    val ollamaMarkdownBlocks by chatViewModel.ollamaMarkdownBlocks.collectAsStateWithLifecycle()
     val canUseChat = (chatViewModel.enabledPlatformsInChat.toSet() - appEnabledPlatforms.toSet()).isEmpty()
     val groupedMessages = remember(messages) { groupMessages(messages) }
     val latestMessageIndex = groupedMessages.keys.maxOrNull() ?: 0
@@ -267,6 +273,14 @@ fun ChatScreen(
                                     ApiType.OLLAMA -> ollamaMessage
                                 }
 
+                                val markdownBlocks = when (apiType) {
+                                    ApiType.OPENAI -> openAIMarkdownBlocks
+                                    ApiType.ANTHROPIC -> anthropicMarkdownBlocks
+                                    ApiType.GOOGLE -> googleMarkdownBlocks
+                                    ApiType.GROQ -> groqMarkdownBlocks
+                                    ApiType.OLLAMA -> ollamaMarkdownBlocks
+                                }
+
                                 val loadingState = when (apiType) {
                                     ApiType.OPENAI -> openaiLoadingState
                                     ApiType.ANTHROPIC -> anthropicLoadingState
@@ -283,6 +297,7 @@ fun ChatScreen(
                                     isLoading = loadingState == ChatViewModel.LoadingState.Loading,
                                     apiType = apiType,
                                     text = message.content,
+                                    markdownBlocks = markdownBlocks,
                                     onCopyClick = { clipboardManager.setText(AnnotatedString(message.content.trim())) },
                                     onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(message.content.trim()))) },
                                     onRetryClick = { chatViewModel.retryQuestion(message) }

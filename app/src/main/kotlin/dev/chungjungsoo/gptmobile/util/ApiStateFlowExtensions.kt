@@ -8,17 +8,34 @@ import kotlinx.coroutines.flow.update
 
 suspend fun Flow<ApiState>.handleStates(
     messageFlow: MutableStateFlow<Message>,
-    onLoadingComplete: () -> Unit
+    onLoadingComplete: () -> Unit,
+    onTextChunk: ((String) -> Unit)? = null,
+    onDone: (() -> Unit)? = null,
+    onError: ((String) -> Unit)? = null
 ) = collect { chunk ->
     when (chunk) {
-        is ApiState.Success -> messageFlow.addContent(chunk.textChunk)
+        is ApiState.Success -> {
+            if (onTextChunk != null) {
+                onTextChunk(chunk.textChunk)
+            } else {
+                messageFlow.addContent(chunk.textChunk)
+            }
+        }
         ApiState.Done -> {
-            messageFlow.setTimestamp()
+            if (onDone != null) {
+                onDone()
+            } else {
+                messageFlow.setTimestamp()
+            }
             onLoadingComplete()
         }
 
         is ApiState.Error -> {
-            messageFlow.setErrorMessage(chunk.message)
+            if (onError != null) {
+                onError(chunk.message)
+            } else {
+                messageFlow.setErrorMessage(chunk.message)
+            }
             onLoadingComplete()
         }
 

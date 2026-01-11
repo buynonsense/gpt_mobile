@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.presentation.theme.GPTMobileTheme
+import dev.chungjungsoo.gptmobile.util.MarkdownBlock
 import dev.chungjungsoo.gptmobile.util.getPlatformAPIBrandText
 import dev.jeziellago.compose.markdowntext.MarkdownText
 
@@ -81,6 +83,7 @@ fun OpponentChatBubble(
     isError: Boolean = false,
     apiType: ApiType,
     text: String,
+    markdownBlocks: List<MarkdownBlock>? = null,
     onCopyClick: () -> Unit = {},
     onCopyPlainTextClick: () -> Unit = {},
     onRetryClick: () -> Unit = {}
@@ -99,12 +102,32 @@ fun OpponentChatBubble(
                 shape = RoundedCornerShape(32.dp),
                 colors = cardColor
             ) {
-                MarkdownText(
-                    modifier = Modifier.padding(24.dp),
-                    markdown = text.trimIndent() + if (isLoading) "▊" else "",
-                    isTextSelectable = true,
-                    linkifyMask = Linkify.WEB_URLS
-                )
+                if (isLoading && markdownBlocks != null && markdownBlocks.isNotEmpty()) {
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        val lastIndex = markdownBlocks.lastIndex
+                        markdownBlocks.forEachIndexed { index, block ->
+                            key(block.id) {
+                                val markdown = if (index == lastIndex && block.isPending) {
+                                    block.content + "▊"
+                                } else {
+                                    block.content
+                                }
+                                MarkdownText(
+                                    markdown = markdown,
+                                    isTextSelectable = true,
+                                    linkifyMask = Linkify.WEB_URLS
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    MarkdownText(
+                        modifier = Modifier.padding(24.dp),
+                        markdown = text.trimIndent() + if (isLoading) "▊" else "",
+                        isTextSelectable = true,
+                        linkifyMask = Linkify.WEB_URLS
+                    )
+                }
                 if (!isLoading) {
                     BrandText(apiType)
                 }
