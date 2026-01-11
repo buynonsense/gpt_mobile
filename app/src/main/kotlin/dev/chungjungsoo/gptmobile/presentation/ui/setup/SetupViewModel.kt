@@ -19,8 +19,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import dev.chungjungsoo.gptmobile.data.repository.ChatRepository
+
 @HiltViewModel
-class SetupViewModel @Inject constructor(private val settingRepository: SettingRepository) : ViewModel() {
+class SetupViewModel @Inject constructor(
+    private val settingRepository: SettingRepository,
+    private val chatRepository: ChatRepository
+) : ViewModel() {
+
+    private val _fetchedModels = MutableStateFlow<Map<ApiType, List<String>>>(emptyMap())
+    val fetchedModels: StateFlow<Map<ApiType, List<String>>> = _fetchedModels.asStateFlow()
+
+    private val _isFetchingModels = MutableStateFlow<Map<ApiType, Boolean>>(emptyMap())
+    val isFetchingModels: StateFlow<Map<ApiType, Boolean>> = _isFetchingModels.asStateFlow()
 
     private val _platformState = MutableStateFlow(
         listOf(
@@ -32,6 +43,16 @@ class SetupViewModel @Inject constructor(private val settingRepository: SettingR
         )
     )
     val platformState: StateFlow<List<Platform>> = _platformState.asStateFlow()
+
+    fun fetchModels(apiType: ApiType) {
+        val platform = _platformState.value.find { it.name == apiType } ?: return
+        viewModelScope.launch {
+            _isFetchingModels.update { it + (apiType to true) }
+            val models = chatRepository.fetchModels(apiType, platform)
+            _fetchedModels.update { it + (apiType to models) }
+            _isFetchingModels.update { it + (apiType to false) }
+        }
+    }
 
     fun updateAPIAddress(platform: Platform, address: String) {
         val index = _platformState.value.indexOf(platform)

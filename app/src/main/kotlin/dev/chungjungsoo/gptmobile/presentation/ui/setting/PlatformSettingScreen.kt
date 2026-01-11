@@ -133,7 +133,7 @@ fun PlatformSettingScreen(
                 title = stringResource(R.string.api_model),
                 description = model,
                 enabled = enabled,
-                onItemClick = settingViewModel::openApiModelDialog,
+                onItemClick = { settingViewModel.openApiModelDialog(apiType) },
                 showTrailingIcon = false,
                 showLeadingIcon = true,
                 leadingIcon = {

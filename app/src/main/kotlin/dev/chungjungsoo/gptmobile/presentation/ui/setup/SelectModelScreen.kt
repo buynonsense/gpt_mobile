@@ -46,6 +46,11 @@ import dev.chungjungsoo.gptmobile.util.generateOpenAIModelList
 import dev.chungjungsoo.gptmobile.util.getAPIModelSelectDescription
 import dev.chungjungsoo.gptmobile.util.getAPIModelSelectTitle
 
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Alignment
+
 @Composable
 fun SelectModelScreen(
     modifier: Modifier = Modifier,
@@ -57,30 +62,35 @@ fun SelectModelScreen(
 ) {
     val title = getAPIModelSelectTitle(platformType)
     val description = getAPIModelSelectDescription(platformType)
-    val availableModels = when (platformType) {
-        ApiType.OPENAI -> generateOpenAIModelList(models = openaiModels)
-        ApiType.ANTHROPIC -> generateAnthropicModelList(models = anthropicModels)
-        ApiType.GOOGLE -> generateGoogleModelList(models = googleModels)
-        ApiType.GROQ -> generateGroqModelList(models = groqModels)
-        ApiType.OLLAMA -> listOf()
+    
+    val fetchedModelsMap by setupViewModel.fetchedModels.collectAsStateWithLifecycle()
+    val isFetchingMap by setupViewModel.isFetchingModels.collectAsStateWithLifecycle()
+    val models = fetchedModelsMap[platformType] ?: emptyList()
+    val isFetching = isFetchingMap[platformType] ?: false
+
+    LaunchedEffect(platformType) {
+         setupViewModel.fetchModels(platformType)
     }
-    val defaultModel = remember {
+
+    val availableModels = models.map { APIModel(it, "", it) }
+    
+    val defaultModel = remember(models) {
         derivedStateOf {
-            setupViewModel.setDefaultModel(
-                platformType,
-                when (platformType) {
-                    ApiType.OPENAI -> 0
-                    ApiType.ANTHROPIC -> 0
-                    ApiType.GOOGLE -> 1
-                    ApiType.GROQ -> 0
-                    ApiType.OLLAMA -> 0
-                }
-            )
+            if (models.isNotEmpty()) {
+                val first = models.first()
+                setupViewModel.updateModel(platformType, first)
+                first
+            } else {
+                ""
+            }
         }
     }
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val platformState by setupViewModel.platformState.collectAsStateWithLifecycle()
+    // If user has selected a model, use it. If not, use default (first fetched).
+    // Note: platformState model might be from previous session or default.
+    // If fetching overrides, we should be careful.
     val model = platformState.firstOrNull { it.name == platformType }?.model ?: defaultModel.value
 
     Scaffold(
@@ -101,11 +111,20 @@ fun SelectModelScreen(
                 }
         ) {
             SelectModelText(title = title, description = description)
-            ModelRadioGroup(
-                availableModels = availableModels,
-                initModel = model,
-                onChangeEvent = { model -> setupViewModel.updateModel(platformType, model) }
-            )
+            if (isFetching) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                ModelRadioGroup(
+                    availableModels = availableModels,
+                    initModel = model,
+                    onChangeEvent = { model -> setupViewModel.updateModel(platformType, model) }
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
             PrimaryLongButton(
                 enabled = availableModels.any { it.aliasValue == model } || model.isNotBlank(),

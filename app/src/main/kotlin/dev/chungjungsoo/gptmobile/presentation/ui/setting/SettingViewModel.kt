@@ -13,9 +13,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+import dev.chungjungsoo.gptmobile.data.repository.ChatRepository
+
 @HiltViewModel
 class SettingViewModel @Inject constructor(
-    private val settingRepository: SettingRepository
+    private val settingRepository: SettingRepository,
+    private val chatRepository: ChatRepository
 ) : ViewModel() {
 
     private val _platformState = MutableStateFlow(listOf<Platform>())
@@ -24,8 +27,24 @@ class SettingViewModel @Inject constructor(
     private val _dialogState = MutableStateFlow(DialogState())
     val dialogState: StateFlow<DialogState> = _dialogState.asStateFlow()
 
+    private val _fetchedModels = MutableStateFlow<List<String>>(emptyList())
+    val fetchedModels: StateFlow<List<String>> = _fetchedModels.asStateFlow()
+
+    private val _isFetchingModels = MutableStateFlow(false)
+    val isFetchingModels: StateFlow<Boolean> = _isFetchingModels.asStateFlow()
+
     init {
         fetchPlatformStatus()
+    }
+
+    private fun fetchAvailableModels(apiType: ApiType) {
+        viewModelScope.launch {
+            _isFetchingModels.value = true
+            _fetchedModels.value = emptyList()
+            val models = chatRepository.fetchModels(apiType)
+            _fetchedModels.value = models
+            _isFetchingModels.value = false
+        }
     }
 
     fun toggleAPI(apiType: ApiType) {
@@ -160,7 +179,10 @@ class SettingViewModel @Inject constructor(
 
     fun openApiTokenDialog() = _dialogState.update { it.copy(isApiTokenDialogOpen = true) }
 
-    fun openApiModelDialog() = _dialogState.update { it.copy(isApiModelDialogOpen = true) }
+    fun openApiModelDialog(apiType: ApiType) {
+        fetchAvailableModels(apiType)
+        _dialogState.update { it.copy(isApiModelDialogOpen = true) }
+    }
 
     fun openTemperatureDialog() = _dialogState.update { it.copy(isTemperatureDialogOpen = true) }
 

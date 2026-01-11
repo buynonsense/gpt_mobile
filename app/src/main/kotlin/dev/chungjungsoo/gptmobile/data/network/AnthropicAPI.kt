@@ -7,5 +7,6 @@ import kotlinx.coroutines.flow.Flow
 interface AnthropicAPI {
     fun setToken(token: String?)
     fun setAPIUrl(url: String)
+    suspend fun fetchModels(): List<String>
     fun streamChatMessage(messageRequest: MessageRequest): Flow<MessageResponseChunk>
 }

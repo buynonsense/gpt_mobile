@@ -5,9 +5,11 @@ import dev.chungjungsoo.gptmobile.data.dto.anthropic.request.MessageRequest
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.ErrorDetail
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.ErrorResponseChunk
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.MessageResponseChunk
+import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.ModelListResponse
 import io.ktor.client.call.body
 import io.ktor.client.request.HttpRequestBuilder
 import io.ktor.client.request.accept
+import io.ktor.client.request.get
 import io.ktor.client.request.headers
 import io.ktor.client.request.setBody
 import io.ktor.client.request.url
@@ -16,6 +18,7 @@ import io.ktor.client.statement.HttpStatement
 import io.ktor.http.ContentType
 import io.ktor.http.HttpMethod
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.utils.io.ByteReadChannel
 import io.ktor.utils.io.cancel
 import io.ktor.utils.io.readUTF8Line
@@ -41,6 +44,26 @@ class AnthropicAPIImpl @Inject constructor(
 
     override fun setAPIUrl(url: String) {
         this.apiUrl = url
+    }
+
+    override suspend fun fetchModels(): List<String> {
+        return try {
+            val response: HttpResponse = networkClient().get {
+                if (apiUrl.endsWith("/")) url("${apiUrl}v1/models") else url("$apiUrl/v1/models")
+                headers {
+                    append(API_KEY_HEADER, token ?: "")
+                    append(VERSION_HEADER, ANTHROPIC_VERSION)
+                }
+            }
+            if (response.status.isSuccess()) {
+                val modelResponse: ModelListResponse = response.body()
+                modelResponse.data.map { it.id }
+            } else {
+                emptyList()
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     override fun streamChatMessage(messageRequest: MessageRequest): Flow<MessageResponseChunk> {

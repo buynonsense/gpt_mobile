@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.data.ModelConstants.anthropicModels
 import dev.chungjungsoo.gptmobile.data.ModelConstants.getDefaultAPIUrl
@@ -98,9 +99,14 @@ fun ModelDialog(
     settingViewModel: SettingViewModel
 ) {
     if (dialogState.isApiModelDialogOpen) {
+        val fetchedModels by settingViewModel.fetchedModels.collectAsStateWithLifecycle()
+        val isFetching by settingViewModel.isFetchingModels.collectAsStateWithLifecycle()
+
         ModelDialog(
             apiType = apiType,
             initModel = model ?: "",
+            fetchedModels = fetchedModels,
+            isFetching = isFetching,
             onDismissRequest = settingViewModel::closeApiModelDialog
         ) { m ->
             settingViewModel.updateModel(apiType, m)
@@ -282,22 +288,13 @@ private fun APIKeyDialog(
 private fun ModelDialog(
     apiType: ApiType,
     initModel: String,
+    fetchedModels: List<String>,
+    isFetching: Boolean,
     onDismissRequest: () -> Unit,
     onConfirmRequest: (model: String) -> Unit
 ) {
-    val modelList = when (apiType) {
-        ApiType.OPENAI -> openaiModels
-        ApiType.ANTHROPIC -> anthropicModels
-        ApiType.GOOGLE -> googleModels
-        ApiType.GROQ -> groqModels
-        ApiType.OLLAMA -> ollamaModels
-    }
-    val availableModels = when (apiType) {
-        ApiType.OPENAI -> generateOpenAIModelList(models = modelList)
-        ApiType.ANTHROPIC -> generateAnthropicModelList(models = modelList)
-        ApiType.GOOGLE -> generateGoogleModelList(models = modelList)
-        ApiType.GROQ -> generateGroqModelList(models = modelList)
-        ApiType.OLLAMA -> listOf()
+    val availableModels = fetchedModels.map { 
+        dev.chungjungsoo.gptmobile.data.dto.APIModel(it, "", it) 
     }
     val configuration = LocalConfiguration.current
     var model by remember { mutableStateOf(initModel) }
@@ -311,49 +308,58 @@ private fun ModelDialog(
             .heightIn(max = configuration.screenHeightDp.dp - 80.dp),
         title = { Text(text = stringResource(R.string.api_model)) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                availableModels.forEach { m ->
+            if (isFetching) {
+                androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                }
+            } else {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    availableModels.forEach { m ->
+                        RadioItem(
+                            value = m.aliasValue,
+                            selected = model == m.aliasValue && !customSelected,
+                            title = m.name,
+                            description = m.description,
+                            onSelected = {
+                                model = it
+                                customSelected = false
+                            }
+                        )
+                    }
                     RadioItem(
-                        value = m.aliasValue,
-                        selected = model == m.aliasValue && !customSelected,
-                        title = m.name,
-                        description = m.description,
+                        value = customModel,
+                        selected = customSelected,
+                        title = stringResource(R.string.custom),
+                        description = stringResource(R.string.custom_description),
                         onSelected = {
-                            model = it
-                            customSelected = false
+                            customSelected = true
+                            customModel = it
+                        }
+                    )
+                    OutlinedTextField(
+                        modifier = Modifier
+                            .padding(start = 24.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        enabled = customSelected,
+                        value = customModel,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        onValueChange = { s -> customModel = s },
+                        label = {
+                            Text(stringResource(R.string.model_name))
+                        },
+                        placeholder = {
+                            Text(stringResource(R.string.model_custom_example))
+                        },
+                        supportingText = {
+                            Text(stringResource(R.string.custom_model_warning))
                         }
                     )
                 }
-                RadioItem(
-                    value = customModel,
-                    selected = customSelected,
-                    title = stringResource(R.string.custom),
-                    description = stringResource(R.string.custom_description),
-                    onSelected = {
-                        customSelected = true
-                        customModel = it
-                    }
-                )
-                OutlinedTextField(
-                    modifier = Modifier
-                        .padding(start = 24.dp)
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 16.dp),
-                    enabled = customSelected,
-                    value = customModel,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    onValueChange = { s -> customModel = s },
-                    label = {
-                        Text(stringResource(R.string.model_name))
-                    },
-                    placeholder = {
-                        Text(stringResource(R.string.model_custom_example))
-                    },
-                    supportingText = {
-                        Text(stringResource(R.string.custom_model_warning))
-                    }
-                )
             }
         },
         onDismissRequest = onDismissRequest,

@@ -221,6 +221,32 @@ class ChatRepositoryImpl @Inject constructor(
         chatRoomDao.deleteChatRooms(*chatRooms.toTypedArray())
     }
 
+    override suspend fun fetchModels(apiType: ApiType, platformConfig: dev.chungjungsoo.gptmobile.data.dto.Platform?): List<String> {
+        return try {
+            val platform = platformConfig ?: settingRepository.fetchPlatforms().firstOrNull { it.name == apiType } ?: return emptyList()
+            if (platform.token.isNullOrBlank()) return emptyList()
+
+            when (apiType) {
+                ApiType.OPENAI, ApiType.GROQ, ApiType.OLLAMA -> {
+                    val hostUrl = if (apiType == ApiType.OLLAMA) "${platform.apiUrl}v1/" else platform.apiUrl
+                    val client = OpenAI(platform.token, host = OpenAIHost(baseUrl = hostUrl))
+                    client.models().map { it.id.id }
+                }
+                ApiType.ANTHROPIC -> {
+                    anthropic.setToken(platform.token)
+                    anthropic.setAPIUrl(platform.apiUrl)
+                    anthropic.fetchModels()
+                }
+                ApiType.GOOGLE -> {
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            emptyList()
+        }
+    }
+
     private fun messageToOpenAICompatibleMessage(apiType: ApiType, messages: List<Message>): List<ChatMessage> {
         val result = mutableListOf<ChatMessage>()
 
