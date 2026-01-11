@@ -95,8 +95,8 @@ fun ChatScreen(
     val focusManager = LocalFocusManager.current
     val clipboardManager = LocalClipboardManager.current
     val packageManager = LocalContext.current.packageManager
-    val systemChatMargin = 32.dp
-    val maximumChatBubbleWidth = screenWidth - 48.dp - systemChatMargin
+    val systemChatMargin = 8.dp
+    val maximumChatBubbleWidth = screenWidth - 32.dp
     val listState = rememberLazyListState()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
 
@@ -231,7 +231,7 @@ fun ChatScreen(
                                     OpponentChatBubble(
                                         modifier = Modifier
                                             .padding(horizontal = 8.dp, vertical = 12.dp)
-                                            .widthIn(max = maximumChatBubbleWidth),
+                                            .width(maximumChatBubbleWidth),
                                         canRetry = canUseChat && isIdle && key >= latestMessageIndex,
                                         isLoading = false,
                                         apiType = apiType,
@@ -292,7 +292,7 @@ fun ChatScreen(
                             OpponentChatBubble(
                                 modifier = Modifier
                                     .padding(horizontal = 8.dp, vertical = 12.dp)
-                                    .widthIn(max = maximumChatBubbleWidth),
+                                    .width(maximumChatBubbleWidth),
                                 canRetry = canUseChat,
                                 isLoading = loadingState == ChatViewModel.LoadingState.Loading,
                                 apiType = apiType,

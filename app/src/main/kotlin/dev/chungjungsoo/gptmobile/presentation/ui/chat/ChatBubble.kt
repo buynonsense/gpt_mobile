@@ -92,8 +92,9 @@ fun OpponentChatBubble(
     )
 
     Column(modifier = modifier) {
-        Column(horizontalAlignment = Alignment.End) {
+        Column(modifier = Modifier.fillMaxWidth()) {
             Card(
+                modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(32.dp),
                 colors = cardColor
             ) {
@@ -109,7 +110,7 @@ fun OpponentChatBubble(
             }
 
             if (!isLoading) {
-                Row {
+                Row(modifier = Modifier.align(Alignment.End)) {
                     if (!isError) {
                         CopyTextChip(onCopyClick)
                     }
