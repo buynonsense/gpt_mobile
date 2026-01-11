@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -149,6 +150,7 @@ fun ChatScreen(
     val context = LocalContext.current
     
     val isBarsVisible by remember { derivedStateOf { !listState.isScrollInProgress } }
+    val fabPadding by animateDpAsState(targetValue = if (isBarsVisible) 120.dp else 16.dp, label = "fabPadding")
 
     val scope = rememberCoroutineScope()
 
@@ -170,16 +172,7 @@ fun ChatScreen(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) { focusManager.clearFocus() },
-        floatingActionButton = {
-            if (listState.canScrollForward) {
-                ScrollToBottomButton {
-                    scope.launch {
-                        listState.animateScrollToItem(groupedMessages.keys.size)
-                    }
-                }
-            }
-        },
-        floatingActionButtonPosition = FabPosition.Center
+        // Floating action button moved to Box
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
             groupedMessages.forEach { (i, k) -> Log.d("grouped", "idx: $i, data: $k") }
@@ -314,6 +307,21 @@ fun ChatScreen(
                     chatViewModel::openChatTitleDialog,
                     onExportChatItemClick = { exportChat(context, chatViewModel) }
                 )
+            }
+
+            AnimatedVisibility(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = fabPadding),
+                visible = listState.canScrollForward,
+                enter = fadeIn(),
+                exit = fadeOut()
+            ) {
+                ScrollToBottomButton {
+                    scope.launch {
+                        listState.animateScrollToItem(groupedMessages.keys.size)
+                    }
+                }
             }
 
             AnimatedVisibility(
@@ -512,9 +520,9 @@ fun ChatInputBox(
     Box(
         modifier = Modifier
             .fillMaxWidth()
+            .background(color = MaterialTheme.colorScheme.surface)
             .windowInsetsPadding(BottomAppBarDefaults.windowInsets)
             .padding(BottomAppBarDefaults.ContentPadding)
-            .background(color = MaterialTheme.colorScheme.surface)
     ) {
         BasicTextField(
             modifier = Modifier
