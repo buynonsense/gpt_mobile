@@ -32,7 +32,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -109,9 +111,8 @@ fun OpponentChatBubble(
     )
 
     // “淡入淡出式”动画：
-    // - 不显示 Pending 块内容（避免逐字变化导致的“打字机既视感”）
-    // - 新完成的块以淡入方式出现
-    // - 底部用呼吸式省略号表示“正在生成”
+    // - 闪现：不显示 Pending 块内容，新完成块快速淡入，底部呼吸省略号表示“正在生成”
+    // - 淡入淡出：不显示 Pending 块内容，新完成块慢速淡入，淡入时长随响应速度动态调整
     val streamTransition = rememberInfiniteTransition(label = "streamFade")
     val pendingAlpha = streamTransition.animateFloat(
         initialValue = 0.35f,
@@ -125,6 +126,10 @@ fun OpponentChatBubble(
 
     val appearedBlockIds = remember { mutableStateMapOf<String, Boolean>() }
 
+    var lastCompletedBlockId by remember { mutableStateOf<String?>(null) }
+    var lastCompletedAtMs by remember { mutableStateOf(0L) }
+    var fadeInDurationMs by remember { mutableStateOf(900) }
+
     Column(modifier = modifier) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Card(
@@ -137,8 +142,24 @@ fun OpponentChatBubble(
                         val lastIndex = markdownBlocks.lastIndex
                         val hasPending = markdownBlocks.lastOrNull()?.isPending == true
 
+                        val latestCompletedId = markdownBlocks.lastOrNull { !it.isPending }?.id
+                        LaunchedEffect(latestCompletedId) {
+                            if (streamingStyle != StreamingStyle.FADE_IN_OUT) return@LaunchedEffect
+                            if (latestCompletedId == null) return@LaunchedEffect
+                            if (latestCompletedId == lastCompletedBlockId) return@LaunchedEffect
+
+                            val now = System.currentTimeMillis()
+                            if (lastCompletedAtMs != 0L) {
+                                val intervalMs = (now - lastCompletedAtMs).coerceIn(200L, 2500L)
+                                val target = (intervalMs * 0.9f).toInt().coerceIn(650, 1800)
+                                fadeInDurationMs = (fadeInDurationMs * 0.7f + target * 0.3f).toInt()
+                            }
+                            lastCompletedAtMs = now
+                            lastCompletedBlockId = latestCompletedId
+                        }
+
                         markdownBlocks.forEachIndexed { index, block ->
-                            if (streamingStyle == StreamingStyle.FADE_IN_OUT && block.isPending) {
+                            if ((streamingStyle == StreamingStyle.FLASH || streamingStyle == StreamingStyle.FADE_IN_OUT) && block.isPending) {
                                 return@forEachIndexed
                             }
 
@@ -146,12 +167,12 @@ fun OpponentChatBubble(
                                 val isLastPending = index == lastIndex && block.isPending
                                 val markdown = when (streamingStyle) {
                                     StreamingStyle.TYPEWRITER -> if (isLastPending) block.content + "▊" else block.content
-                                    StreamingStyle.FADE_IN_OUT -> block.content
+                                    StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> block.content
                                 }
 
                                 val alpha = when (streamingStyle) {
                                     StreamingStyle.TYPEWRITER -> 1f
-                                    StreamingStyle.FADE_IN_OUT -> {
+                                    StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> {
                                         val isAppeared = appearedBlockIds[block.id] == true
                                         val target = if (isAppeared) 1f else 0f
 
@@ -159,9 +180,14 @@ fun OpponentChatBubble(
                                             appearedBlockIds[block.id] = true
                                         }
 
+                                        val durationMs = when (streamingStyle) {
+                                            StreamingStyle.FLASH -> 220
+                                            StreamingStyle.FADE_IN_OUT -> fadeInDurationMs
+                                            else -> 220
+                                        }
                                         val animatedAlpha by animateFloatAsState(
                                             targetValue = target,
-                                            animationSpec = tween(durationMillis = 220),
+                                            animationSpec = tween(durationMillis = durationMs),
                                             label = "blockFadeIn"
                                         )
                                         animatedAlpha
@@ -177,7 +203,7 @@ fun OpponentChatBubble(
                             }
                         }
 
-                        if (streamingStyle == StreamingStyle.FADE_IN_OUT && hasPending) {
+                        if ((streamingStyle == StreamingStyle.FLASH || streamingStyle == StreamingStyle.FADE_IN_OUT) && hasPending) {
                             Text(
                                 modifier = Modifier.alpha(pendingAlpha),
                                 text = "…",
@@ -189,11 +215,11 @@ fun OpponentChatBubble(
                 } else {
                     val markdown = when (streamingStyle) {
                         StreamingStyle.TYPEWRITER -> text.trimIndent() + if (isLoading) "▊" else ""
-                        StreamingStyle.FADE_IN_OUT -> text.trimIndent()
+                        StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> text.trimIndent()
                     }
                     val alpha = when (streamingStyle) {
                         StreamingStyle.TYPEWRITER -> 1f
-                        StreamingStyle.FADE_IN_OUT -> if (isLoading) pendingAlpha else 1f
+                        StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> if (isLoading) pendingAlpha else 1f
                     }
                     MarkdownText(
                         modifier = Modifier

@@ -154,5 +154,6 @@ fun getPlatformAPIBrandText(apiType: ApiType) = when (apiType) {
 @Composable
 fun getStreamingStyleTitle(style: StreamingStyle) = when (style) {
     StreamingStyle.TYPEWRITER -> stringResource(R.string.streaming_style_typewriter)
+    StreamingStyle.FLASH -> stringResource(R.string.streaming_style_flash)
     StreamingStyle.FADE_IN_OUT -> stringResource(R.string.streaming_style_fade)
 }
