@@ -65,6 +65,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -92,6 +93,8 @@ import dev.chungjungsoo.gptmobile.util.DefaultHashMap
 import dev.chungjungsoo.gptmobile.util.multiScrollStateSaver
 import java.io.File
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -161,15 +164,69 @@ fun ChatScreen(
     val isBarsVisible by remember { derivedStateOf { !listState.isScrollInProgress } }
     val fabPadding by animateDpAsState(targetValue = if (isBarsVisible) 120.dp else 16.dp, label = "fabPadding")
 
+    // 自动跟随开关：
+    // - 初始为 true（默认跟随底部）
+    // - 用户手动上滑离开底部后置为 false（不再强行拉回）
+    // - 用户回到底部/点击“到底部”按钮后置为 true
+    var autoScrollEnabled by rememberSaveable { mutableStateOf(true) }
+    var isProgrammaticScroll by remember { mutableStateOf(false) }
+
+    val bottomItemIndex by remember { derivedStateOf { (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0) } }
+
+    suspend fun scrollToBottom(animated: Boolean) {
+        if (listState.layoutInfo.totalItemsCount <= 0) return
+        isProgrammaticScroll = true
+        try {
+            if (animated) {
+                listState.animateScrollToItem(bottomItemIndex)
+            } else {
+                listState.scrollToItem(bottomItemIndex)
+            }
+        } finally {
+            isProgrammaticScroll = false
+        }
+    }
+
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(isIdle) {
-        listState.animateScrollToItem(groupedMessages.keys.size)
+    // 监听用户滚动：只要用户把列表滚离底部，就关闭自动跟随。
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .filter { inProgress -> !inProgress }
+            .collect {
+                if (!isProgrammaticScroll) {
+                    autoScrollEnabled = !listState.canScrollForward
+                }
+            }
     }
 
     LaunchedEffect(isLoaded) {
         delay(300)
-        listState.animateScrollToItem(groupedMessages.keys.size)
+        autoScrollEnabled = true
+        scrollToBottom(animated = false)
+    }
+
+    // 流式输出过程中，内容会频繁更新但不一定新增 item；用轻量的“进度指纹”触发跟随滚动。
+    val streamingProgressFingerprint =
+        messages.size +
+            userMessage.content.length +
+            openAIMessage.content.length +
+            anthropicMessage.content.length +
+            googleMessage.content.length +
+            groqMessage.content.length +
+            ollamaMessage.content.length +
+            (openAIMarkdownBlocks.size * 31 + (openAIMarkdownBlocks.lastOrNull()?.content?.length ?: 0)) +
+            (anthropicMarkdownBlocks.size * 37 + (anthropicMarkdownBlocks.lastOrNull()?.content?.length ?: 0)) +
+            (googleMarkdownBlocks.size * 41 + (googleMarkdownBlocks.lastOrNull()?.content?.length ?: 0)) +
+            (groqMarkdownBlocks.size * 43 + (groqMarkdownBlocks.lastOrNull()?.content?.length ?: 0)) +
+            (ollamaMarkdownBlocks.size * 47 + (ollamaMarkdownBlocks.lastOrNull()?.content?.length ?: 0))
+
+    LaunchedEffect(isIdle, streamingProgressFingerprint) {
+        if (autoScrollEnabled) {
+            // 高频更新下用非动画滚动更稳，避免抖动。
+            scrollToBottom(animated = false)
+        }
     }
 
     Log.d("AIPackage", "AICore: ${aiCorePackageInfo?.versionName ?: "Not installed"}, Private Compute Services: ${privateComputePackageInfo?.versionName ?: "Not installed"}")
@@ -312,6 +369,11 @@ fun ChatScreen(
                         }
                     }
                 }
+
+                // 底部锚点：用于确保“滚到底部”能把最后一条消息的底部也露出来。
+                item {
+                    Spacer(modifier = Modifier.height(1.dp))
+                }
             }
 
             AnimatedVisibility(
@@ -340,7 +402,8 @@ fun ChatScreen(
             ) {
                 ScrollToBottomButton {
                     scope.launch {
-                        listState.animateScrollToItem(groupedMessages.keys.size)
+                        autoScrollEnabled = true
+                        scrollToBottom(animated = true)
                     }
                 }
             }
