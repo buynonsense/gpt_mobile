@@ -87,6 +87,7 @@
     <string name="model_icon">Model Icon</string>
     <string name="send">Send</string>
     <string name="copy_text">Copy Text</string>
+    <string name="copy_plain_text">Copy Plain Text</string>
     <string name="retry">Retry</string>
     <string name="ask_a_question">Ask a question…</string>
     <string name="some_platforms_disabled">Some APIs are disabled</string>

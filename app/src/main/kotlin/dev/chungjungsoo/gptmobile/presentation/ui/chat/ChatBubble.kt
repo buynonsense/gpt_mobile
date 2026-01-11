@@ -82,6 +82,7 @@ fun OpponentChatBubble(
     apiType: ApiType,
     text: String,
     onCopyClick: () -> Unit = {},
+    onCopyPlainTextClick: () -> Unit = {},
     onRetryClick: () -> Unit = {}
 ) {
     val cardColor = CardColors(
@@ -112,6 +113,8 @@ fun OpponentChatBubble(
             if (!isLoading) {
                 Row(modifier = Modifier.align(Alignment.End)) {
                     if (!isError) {
+                        CopyPlainTextChip(onCopyPlainTextClick)
+                        Spacer(modifier = Modifier.width(8.dp))
                         CopyTextChip(onCopyClick)
                     }
                     if (canRetry) {
@@ -133,6 +136,21 @@ private fun EditTextChip(onEditClick: () -> Unit) {
             Icon(
                 Icons.Outlined.Edit,
                 contentDescription = stringResource(R.string.edit),
+                modifier = Modifier.size(AssistChipDefaults.IconSize)
+            )
+        }
+    )
+}
+
+@Composable
+private fun CopyPlainTextChip(onCopyClick: () -> Unit) {
+    AssistChip(
+        onClick = onCopyClick,
+        label = { Text(stringResource(R.string.copy_plain_text)) },
+        leadingIcon = {
+            Icon(
+                imageVector = ImageVector.vectorResource(id = R.drawable.ic_copy),
+                contentDescription = stringResource(R.string.copy_plain_text),
                 modifier = Modifier.size(AssistChipDefaults.IconSize)
             )
         }

@@ -214,18 +214,18 @@ fun ChatScreen(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 groupedMessages[key]!!.sortedBy { it.platformType }.forEach { m ->
                                     m.platformType?.let { apiType ->
-                                        OpponentChatBubble(
-                                            modifier = Modifier
-                                                .padding(horizontal = 8.dp, vertical = 12.dp)
-                                                .width(maximumChatBubbleWidth),
-                                            canRetry = canUseChat && isIdle && key >= latestMessageIndex,
-                                            isLoading = false,
-                                            apiType = apiType,
-                                            text = m.content,
-                                            onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
-                                            onRetryClick = { chatViewModel.retryQuestion(m) }
-                                        )
-                                    }
+                                                                            OpponentChatBubble(
+                                                                                modifier = Modifier
+                                                                                    .padding(horizontal = 8.dp, vertical = 12.dp)
+                                                                                    .width(maximumChatBubbleWidth),
+                                                                                canRetry = canUseChat && isIdle && key >= latestMessageIndex,
+                                                                                isLoading = false,
+                                                                                apiType = apiType,
+                                                                                text = m.content,
+                                                                                onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
+                                                                                onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(m.content.trim()))) },
+                                                                                onRetryClick = { chatViewModel.retryQuestion(m) }
+                                                                            )                                    }
                                 }
                                 Spacer(modifier = Modifier.width(systemChatMargin))
                             }
@@ -284,6 +284,7 @@ fun ChatScreen(
                                     apiType = apiType,
                                     text = message.content,
                                     onCopyClick = { clipboardManager.setText(AnnotatedString(message.content.trim())) },
+                                    onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(message.content.trim()))) },
                                     onRetryClick = { chatViewModel.retryQuestion(message) }
                                 )
                             }
