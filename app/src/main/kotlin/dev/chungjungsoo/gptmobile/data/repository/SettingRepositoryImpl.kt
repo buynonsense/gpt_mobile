@@ -6,6 +6,7 @@ import dev.chungjungsoo.gptmobile.data.dto.Platform
 import dev.chungjungsoo.gptmobile.data.dto.ThemeSetting
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 import javax.inject.Inject
 
@@ -51,6 +52,9 @@ class SettingRepositoryImpl @Inject constructor(
         themeMode = settingDataSource.getThemeMode() ?: ThemeMode.SYSTEM
     )
 
+    override suspend fun fetchStreamingStyle(): StreamingStyle =
+        settingDataSource.getStreamingStyle() ?: StreamingStyle.TYPEWRITER
+
     override suspend fun updatePlatforms(platforms: List<Platform>) {
         platforms.forEach { platform ->
             settingDataSource.updateStatus(platform.name, platform.enabled)
@@ -67,5 +71,9 @@ class SettingRepositoryImpl @Inject constructor(
     override suspend fun updateThemes(themeSetting: ThemeSetting) {
         settingDataSource.updateDynamicTheme(themeSetting.dynamicTheme)
         settingDataSource.updateThemeMode(themeSetting.themeMode)
+    }
+
+    override suspend fun updateStreamingStyle(style: StreamingStyle) {
+        settingDataSource.updateStreamingStyle(style)
     }
 }

@@ -192,4 +192,8 @@
     <string name="edit_question">Edit User Message</string>
     <string name="user_message">User Message</string>
     <string name="export_chat">Export Chat</string>
+    <string name="streaming_style">流式样式</string>
+    <string name="streaming_style_description">AI 响应输出的动画样式</string>
+    <string name="streaming_style_typewriter">打字机</string>
+    <string name="streaming_style_fade">淡入淡出</string>
 </resources>

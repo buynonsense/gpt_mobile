@@ -1,6 +1,12 @@
 package dev.chungjungsoo.gptmobile.presentation.ui.chat
 
 import android.text.util.Linkify
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,10 +27,15 @@ import androidx.compose.material3.CardColors
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
@@ -32,6 +43,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.data.model.ApiType
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.presentation.theme.GPTMobileTheme
 import dev.chungjungsoo.gptmobile.util.MarkdownBlock
 import dev.chungjungsoo.gptmobile.util.getPlatformAPIBrandText
@@ -84,6 +96,7 @@ fun OpponentChatBubble(
     apiType: ApiType,
     text: String,
     markdownBlocks: List<MarkdownBlock>? = null,
+    streamingStyle: StreamingStyle = StreamingStyle.TYPEWRITER,
     onCopyClick: () -> Unit = {},
     onCopyPlainTextClick: () -> Unit = {},
     onRetryClick: () -> Unit = {}
@@ -95,6 +108,23 @@ fun OpponentChatBubble(
         disabledContainerColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.38f)
     )
 
+    // “淡入淡出式”动画：
+    // - 不显示 Pending 块内容（避免逐字变化导致的“打字机既视感”）
+    // - 新完成的块以淡入方式出现
+    // - 底部用呼吸式省略号表示“正在生成”
+    val streamTransition = rememberInfiniteTransition(label = "streamFade")
+    val pendingAlpha = streamTransition.animateFloat(
+        initialValue = 0.35f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 700),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pendingAlpha"
+    ).value
+
+    val appearedBlockIds = remember { mutableStateMapOf<String, Boolean>() }
+
     Column(modifier = modifier) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Card(
@@ -105,25 +135,71 @@ fun OpponentChatBubble(
                 if (isLoading && markdownBlocks != null && markdownBlocks.isNotEmpty()) {
                     Column(modifier = Modifier.padding(24.dp)) {
                         val lastIndex = markdownBlocks.lastIndex
+                        val hasPending = markdownBlocks.lastOrNull()?.isPending == true
+
                         markdownBlocks.forEachIndexed { index, block ->
+                            if (streamingStyle == StreamingStyle.FADE_IN_OUT && block.isPending) {
+                                return@forEachIndexed
+                            }
+
                             key(block.id) {
-                                val markdown = if (index == lastIndex && block.isPending) {
-                                    block.content + "▊"
-                                } else {
-                                    block.content
+                                val isLastPending = index == lastIndex && block.isPending
+                                val markdown = when (streamingStyle) {
+                                    StreamingStyle.TYPEWRITER -> if (isLastPending) block.content + "▊" else block.content
+                                    StreamingStyle.FADE_IN_OUT -> block.content
                                 }
+
+                                val alpha = when (streamingStyle) {
+                                    StreamingStyle.TYPEWRITER -> 1f
+                                    StreamingStyle.FADE_IN_OUT -> {
+                                        val isAppeared = appearedBlockIds[block.id] == true
+                                        val target = if (isAppeared) 1f else 0f
+
+                                        LaunchedEffect(block.id) {
+                                            appearedBlockIds[block.id] = true
+                                        }
+
+                                        val animatedAlpha by animateFloatAsState(
+                                            targetValue = target,
+                                            animationSpec = tween(durationMillis = 220),
+                                            label = "blockFadeIn"
+                                        )
+                                        animatedAlpha
+                                    }
+                                }
+
                                 MarkdownText(
+                                    modifier = Modifier.alpha(alpha),
                                     markdown = markdown,
                                     isTextSelectable = true,
                                     linkifyMask = Linkify.WEB_URLS
                                 )
                             }
                         }
+
+                        if (streamingStyle == StreamingStyle.FADE_IN_OUT && hasPending) {
+                            Text(
+                                modifier = Modifier.alpha(pendingAlpha),
+                                text = "…",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
                     }
                 } else {
+                    val markdown = when (streamingStyle) {
+                        StreamingStyle.TYPEWRITER -> text.trimIndent() + if (isLoading) "▊" else ""
+                        StreamingStyle.FADE_IN_OUT -> text.trimIndent()
+                    }
+                    val alpha = when (streamingStyle) {
+                        StreamingStyle.TYPEWRITER -> 1f
+                        StreamingStyle.FADE_IN_OUT -> if (isLoading) pendingAlpha else 1f
+                    }
                     MarkdownText(
-                        modifier = Modifier.padding(24.dp),
-                        markdown = text.trimIndent() + if (isLoading) "▊" else "",
+                        modifier = Modifier
+                            .padding(24.dp)
+                            .alpha(alpha),
+                        markdown = markdown,
                         isTextSelectable = true,
                         linkifyMask = Linkify.WEB_URLS
                     )

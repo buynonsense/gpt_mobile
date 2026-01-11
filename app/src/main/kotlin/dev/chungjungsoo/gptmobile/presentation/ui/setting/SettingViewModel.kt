@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.chungjungsoo.gptmobile.data.dto.Platform
 import dev.chungjungsoo.gptmobile.data.model.ApiType
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +25,9 @@ class SettingViewModel @Inject constructor(
     private val _platformState = MutableStateFlow(listOf<Platform>())
     val platformState: StateFlow<List<Platform>> = _platformState.asStateFlow()
 
+    private val _streamingStyle = MutableStateFlow(StreamingStyle.TYPEWRITER)
+    val streamingStyle: StateFlow<StreamingStyle> = _streamingStyle.asStateFlow()
+
     private val _dialogState = MutableStateFlow(DialogState())
     val dialogState: StateFlow<DialogState> = _dialogState.asStateFlow()
 
@@ -35,6 +39,7 @@ class SettingViewModel @Inject constructor(
 
     init {
         fetchPlatformStatus()
+        fetchStreamingStyle()
     }
 
     private fun fetchAvailableModels(apiType: ApiType) {
@@ -175,6 +180,8 @@ class SettingViewModel @Inject constructor(
 
     fun openThemeDialog() = _dialogState.update { it.copy(isThemeDialogOpen = true) }
 
+    fun openStreamingStyleDialog() = _dialogState.update { it.copy(isStreamingStyleDialogOpen = true) }
+
     fun openApiUrlDialog() = _dialogState.update { it.copy(isApiUrlDialogOpen = true) }
 
     fun openApiTokenDialog() = _dialogState.update { it.copy(isApiTokenDialogOpen = true) }
@@ -191,6 +198,8 @@ class SettingViewModel @Inject constructor(
     fun openSystemPromptDialog() = _dialogState.update { it.copy(isSystemPromptDialogOpen = true) }
 
     fun closeThemeDialog() = _dialogState.update { it.copy(isThemeDialogOpen = false) }
+
+    fun closeStreamingStyleDialog() = _dialogState.update { it.copy(isStreamingStyleDialogOpen = false) }
 
     fun closeApiUrlDialog() = _dialogState.update { it.copy(isApiUrlDialogOpen = false) }
 
@@ -211,8 +220,23 @@ class SettingViewModel @Inject constructor(
         }
     }
 
+    private fun fetchStreamingStyle() {
+        viewModelScope.launch {
+            val style = settingRepository.fetchStreamingStyle()
+            _streamingStyle.update { style }
+        }
+    }
+
+    fun updateStreamingStyle(style: StreamingStyle) {
+        _streamingStyle.update { style }
+        viewModelScope.launch {
+            settingRepository.updateStreamingStyle(style)
+        }
+    }
+
     data class DialogState(
         val isThemeDialogOpen: Boolean = false,
+        val isStreamingStyleDialogOpen: Boolean = false,
         val isApiUrlDialogOpen: Boolean = false,
         val isApiTokenDialogOpen: Boolean = false,
         val isApiModelDialogOpen: Boolean = false,

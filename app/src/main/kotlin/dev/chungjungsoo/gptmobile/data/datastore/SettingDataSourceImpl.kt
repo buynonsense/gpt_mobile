@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
@@ -68,6 +69,7 @@ class SettingDataSourceImpl @Inject constructor(
     )
     private val dynamicThemeKey = intPreferencesKey("dynamic_mode")
     private val themeModeKey = intPreferencesKey("theme_mode")
+    private val streamingStyleKey = intPreferencesKey("streaming_style")
 
     override suspend fun updateDynamicTheme(theme: DynamicTheme) {
         dataStore.edit { pref ->
@@ -78,6 +80,12 @@ class SettingDataSourceImpl @Inject constructor(
     override suspend fun updateThemeMode(themeMode: ThemeMode) {
         dataStore.edit { pref ->
             pref[themeModeKey] = themeMode.ordinal
+        }
+    }
+
+    override suspend fun updateStreamingStyle(style: StreamingStyle) {
+        dataStore.edit { pref ->
+            pref[streamingStyleKey] = style.value
         }
     }
 
@@ -137,6 +145,14 @@ class SettingDataSourceImpl @Inject constructor(
         }.first() ?: return null
 
         return ThemeMode.getByValue(mode)
+    }
+
+    override suspend fun getStreamingStyle(): StreamingStyle? {
+        val style = dataStore.data.map { pref ->
+            pref[streamingStyleKey]
+        }.first() ?: return null
+
+        return StreamingStyle.getByValue(style)
     }
 
     override suspend fun getStatus(apiType: ApiType): Boolean? = dataStore.data.map { pref ->

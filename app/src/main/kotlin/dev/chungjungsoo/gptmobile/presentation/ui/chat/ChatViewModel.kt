@@ -9,6 +9,7 @@ import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
 import dev.chungjungsoo.gptmobile.data.database.entity.Message
 import dev.chungjungsoo.gptmobile.data.dto.ApiState
 import dev.chungjungsoo.gptmobile.data.model.ApiType
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.repository.ChatRepository
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import dev.chungjungsoo.gptmobile.util.IncrementalMarkdownParser
@@ -51,6 +52,9 @@ class ChatViewModel @Inject constructor(
     // Enabled platforms list
     private val _enabledPlatformsInApp = MutableStateFlow(listOf<ApiType>())
     val enabledPlatformsInApp = _enabledPlatformsInApp.asStateFlow()
+
+    private val _streamingStyle = MutableStateFlow(StreamingStyle.TYPEWRITER)
+    val streamingStyle = _streamingStyle.asStateFlow()
 
     // List of question & answers (User, Assistant)
     private val _messages = MutableStateFlow(listOf<Message>())
@@ -206,6 +210,7 @@ class ChatViewModel @Inject constructor(
         fetchChatRoom()
         viewModelScope.launch { fetchMessages() }
         fetchEnabledPlatformsInApp()
+        fetchStreamingStyle()
         observeFlow()
     }
 
@@ -464,6 +469,13 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             val enabled = settingRepository.fetchPlatforms().filter { it.enabled }.map { it.name }
             _enabledPlatformsInApp.update { enabled }
+        }
+    }
+
+    private fun fetchStreamingStyle() {
+        viewModelScope.launch {
+            val style = settingRepository.fetchStreamingStyle()
+            _streamingStyle.update { style }
         }
     }
 

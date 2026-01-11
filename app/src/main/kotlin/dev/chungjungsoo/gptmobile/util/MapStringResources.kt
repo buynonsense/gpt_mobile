@@ -6,6 +6,7 @@ import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.data.dto.APIModel
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 
 @Composable
@@ -148,4 +149,10 @@ fun getPlatformAPIBrandText(apiType: ApiType) = when (apiType) {
     ApiType.GOOGLE -> stringResource(R.string.google_brand_text)
     ApiType.GROQ -> stringResource(R.string.groq_brand_text)
     ApiType.OLLAMA -> stringResource(R.string.ollama_brand_text)
+}
+
+@Composable
+fun getStreamingStyleTitle(style: StreamingStyle) = when (style) {
+    StreamingStyle.TYPEWRITER -> stringResource(R.string.streaming_style_typewriter)
+    StreamingStyle.FADE_IN_OUT -> stringResource(R.string.streaming_style_fade)
 }

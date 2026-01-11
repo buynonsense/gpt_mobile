@@ -32,6 +32,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 import dev.chungjungsoo.gptmobile.presentation.common.LocalDynamicTheme
 import dev.chungjungsoo.gptmobile.presentation.common.LocalThemeMode
@@ -41,6 +42,7 @@ import dev.chungjungsoo.gptmobile.presentation.common.SettingItem
 import dev.chungjungsoo.gptmobile.util.getDynamicThemeTitle
 import dev.chungjungsoo.gptmobile.util.getPlatformSettingDescription
 import dev.chungjungsoo.gptmobile.util.getPlatformSettingTitle
+import dev.chungjungsoo.gptmobile.util.getStreamingStyleTitle
 import dev.chungjungsoo.gptmobile.util.getThemeModeTitle
 import dev.chungjungsoo.gptmobile.util.pinnedExitUntilCollapsedScrollBehavior
 
@@ -75,6 +77,7 @@ fun SettingScreen(
                 .verticalScroll(scrollState)
         ) {
             ThemeSetting { settingViewModel.openThemeDialog() }
+            StreamingStyleSetting { settingViewModel.openStreamingStyleDialog() }
             ApiType.entries.forEach { apiType ->
                 SettingItem(
                     title = getPlatformSettingTitle(apiType),
@@ -88,6 +91,10 @@ fun SettingScreen(
 
             if (dialogState.isThemeDialogOpen) {
                 ThemeSettingDialog(settingViewModel)
+            }
+
+            if (dialogState.isStreamingStyleDialogOpen) {
+                StreamingStyleDialog(settingViewModel)
             }
         }
     }
@@ -131,6 +138,19 @@ fun ThemeSetting(
     SettingItem(
         title = stringResource(R.string.theme_settings),
         description = stringResource(R.string.theme_description),
+        onItemClick = onItemClick,
+        showTrailingIcon = false,
+        showLeadingIcon = false
+    )
+}
+
+@Composable
+fun StreamingStyleSetting(
+    onItemClick: () -> Unit
+) {
+    SettingItem(
+        title = stringResource(R.string.streaming_style),
+        description = stringResource(R.string.streaming_style_description),
         onItemClick = onItemClick,
         showTrailingIcon = false,
         showLeadingIcon = false
@@ -203,6 +223,45 @@ fun ThemeSettingDialog(
         confirmButton = {
             TextButton(
                 onClick = settingViewModel::closeThemeDialog
+            ) {
+                Text(stringResource(R.string.confirm))
+            }
+        }
+    )
+}
+
+@Composable
+fun StreamingStyleDialog(
+    settingViewModel: SettingViewModel = hiltViewModel()
+) {
+    val streamingStyle by settingViewModel.streamingStyle.collectAsStateWithLifecycle()
+    AlertDialog(
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                Text(text = stringResource(R.string.streaming_style), style = MaterialTheme.typography.titleMedium)
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(16.dp)
+                )
+                StreamingStyle.entries.forEach { style ->
+                    RadioItem(
+                        title = getStreamingStyleTitle(style),
+                        description = null,
+                        value = style.name,
+                        selected = streamingStyle == style
+                    ) {
+                        settingViewModel.updateStreamingStyle(style)
+                    }
+                }
+            }
+        },
+        onDismissRequest = settingViewModel::closeStreamingStyleDialog,
+        confirmButton = {
+            TextButton(
+                onClick = settingViewModel::closeStreamingStyleDialog
             ) {
                 Text(stringResource(R.string.confirm))
             }

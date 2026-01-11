@@ -148,6 +148,9 @@ fun ChatScreen(
     val googleMarkdownBlocks by chatViewModel.googleMarkdownBlocks.collectAsStateWithLifecycle()
     val groqMarkdownBlocks by chatViewModel.groqMarkdownBlocks.collectAsStateWithLifecycle()
     val ollamaMarkdownBlocks by chatViewModel.ollamaMarkdownBlocks.collectAsStateWithLifecycle()
+
+    val streamingStyle by chatViewModel.streamingStyle.collectAsStateWithLifecycle()
+
     val canUseChat = (chatViewModel.enabledPlatformsInChat.toSet() - appEnabledPlatforms.toSet()).isEmpty()
     val groupedMessages = remember(messages) { groupMessages(messages) }
     val latestMessageIndex = groupedMessages.keys.maxOrNull() ?: 0
@@ -228,6 +231,7 @@ fun ChatScreen(
                                                                                 isLoading = false,
                                                                                 apiType = apiType,
                                                                                 text = m.content,
+                                                                                streamingStyle = streamingStyle,
                                                                                 onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
                                                                                 onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(m.content.trim()))) },
                                                                                 onRetryClick = { chatViewModel.retryQuestion(m) }
@@ -298,6 +302,7 @@ fun ChatScreen(
                                     apiType = apiType,
                                     text = message.content,
                                     markdownBlocks = markdownBlocks,
+                                    streamingStyle = streamingStyle,
                                     onCopyClick = { clipboardManager.setText(AnnotatedString(message.content.trim())) },
                                     onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(message.content.trim()))) },
                                     onRetryClick = { chatViewModel.retryQuestion(message) }
