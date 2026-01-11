@@ -10,6 +10,7 @@ import dev.chungjungsoo.gptmobile.data.database.entity.Message
 import dev.chungjungsoo.gptmobile.data.dto.ApiState
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
+import dev.chungjungsoo.gptmobile.data.repository.AiMaskRepository
 import dev.chungjungsoo.gptmobile.data.repository.ChatRepository
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import dev.chungjungsoo.gptmobile.util.IncrementalMarkdownParser
@@ -27,7 +28,8 @@ import kotlinx.coroutines.launch
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chatRepository: ChatRepository,
-    private val settingRepository: SettingRepository
+    private val settingRepository: SettingRepository,
+    private val aiMaskRepository: AiMaskRepository
 ) : ViewModel() {
     sealed class LoadingState {
         data object Idle : LoadingState()
@@ -36,6 +38,7 @@ class ChatViewModel @Inject constructor(
 
     private val chatRoomId: Int = checkNotNull(savedStateHandle["chatRoomId"])
     private val enabledPlatformString: String = checkNotNull(savedStateHandle["enabledPlatforms"])
+    private val maskId: Int = savedStateHandle["maskId"] ?: -1
     val enabledPlatformsInChat = enabledPlatformString.split(',').map { s -> ApiType.valueOf(s) }
     private val currentTimeStamp: Long
         get() = System.currentTimeMillis() / 1000
@@ -404,35 +407,55 @@ class ChatViewModel @Inject constructor(
 
     private fun completeAnthropicChat() {
         viewModelScope.launch {
-            val chatFlow = chatRepository.completeAnthropicChat(question = _userMessage.value, history = _messages.value)
+            val chatFlow = chatRepository.completeAnthropicChat(
+                question = _userMessage.value,
+                history = _messages.value,
+                systemPrompt = _chatRoom.value.systemPrompt
+            )
             chatFlow.collect { chunk -> anthropicFlow.emit(chunk) }
         }
     }
 
     private fun completeGoogleChat() {
         viewModelScope.launch {
-            val chatFlow = chatRepository.completeGoogleChat(question = _userMessage.value, history = _messages.value)
+            val chatFlow = chatRepository.completeGoogleChat(
+                question = _userMessage.value,
+                history = _messages.value,
+                systemPrompt = _chatRoom.value.systemPrompt
+            )
             chatFlow.collect { chunk -> googleFlow.emit(chunk) }
         }
     }
 
     private fun completeGroqChat() {
         viewModelScope.launch {
-            val chatFlow = chatRepository.completeGroqChat(question = _userMessage.value, history = _messages.value)
+            val chatFlow = chatRepository.completeGroqChat(
+                question = _userMessage.value,
+                history = _messages.value,
+                systemPrompt = _chatRoom.value.systemPrompt
+            )
             chatFlow.collect { chunk -> groqFlow.emit(chunk) }
         }
     }
 
     private fun completeOllamaChat() {
         viewModelScope.launch {
-            val chatFlow = chatRepository.completeOllamaChat(question = _userMessage.value, history = _messages.value)
+            val chatFlow = chatRepository.completeOllamaChat(
+                question = _userMessage.value,
+                history = _messages.value,
+                systemPrompt = _chatRoom.value.systemPrompt
+            )
             chatFlow.collect { chunk -> ollamaFlow.emit(chunk) }
         }
     }
 
     private fun completeOpenAIChat() {
         viewModelScope.launch {
-            val chatFlow = chatRepository.completeOpenAIChat(question = _userMessage.value, history = _messages.value)
+            val chatFlow = chatRepository.completeOpenAIChat(
+                question = _userMessage.value,
+                history = _messages.value,
+                systemPrompt = _chatRoom.value.systemPrompt
+            )
             chatFlow.collect { chunk -> openAIFlow.emit(chunk) }
         }
     }
@@ -454,12 +477,22 @@ class ChatViewModel @Inject constructor(
 
     private fun fetchChatRoom() {
         viewModelScope.launch {
-            _chatRoom.update {
-                if (chatRoomId == 0) {
-                    ChatRoom(id = 0, title = "Untitled Chat", enabledPlatform = enabledPlatformsInChat)
-                } else {
-                    chatRepository.fetchChatList().first { it.id == chatRoomId }
+            if (chatRoomId == 0) {
+                var room = ChatRoom(id = 0, title = "Untitled Chat", enabledPlatform = enabledPlatformsInChat)
+                if (maskId > 0) {
+                    val mask = aiMaskRepository.fetchById(maskId)
+                    if (mask != null) {
+                        room = room.copy(
+                            maskId = mask.id,
+                            maskName = mask.name,
+                            systemPrompt = mask.systemPrompt
+                        )
+                        aiMaskRepository.touch(mask.id)
+                    }
                 }
+                _chatRoom.update { room }
+            } else {
+                _chatRoom.update { chatRepository.fetchChatList().first { it.id == chatRoomId } }
             }
             Log.d("ViewModel", "chatroom: $chatRoom")
         }
@@ -600,7 +633,7 @@ class ChatViewModel @Inject constructor(
             ApiType.OLLAMA -> _ollamaLoadingState
         }
 
-        if (retryingState == LoadingState.Loading) return
+        if (retryingState.value == LoadingState.Loading) return
         if (message == null) return
 
         when (apiType) {

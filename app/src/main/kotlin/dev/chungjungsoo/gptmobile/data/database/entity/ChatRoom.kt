@@ -21,6 +21,15 @@ data class ChatRoom(
     @ColumnInfo(name = "enabled_platform")
     val enabledPlatform: List<ApiType>,
 
+    @ColumnInfo(name = "mask_id")
+    val maskId: Int? = null,
+
+    @ColumnInfo(name = "mask_name")
+    val maskName: String? = null,
+
+    @ColumnInfo(name = "system_prompt")
+    val systemPrompt: String? = null,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis() / 1000
 ) : Parcelable

@@ -8,6 +8,8 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.chungjungsoo.gptmobile.data.database.ChatDatabase
+import dev.chungjungsoo.gptmobile.data.database.Migrations
+import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
 import dev.chungjungsoo.gptmobile.data.database.dao.MessageDao
 import javax.inject.Singleton
@@ -24,10 +26,14 @@ object DatabaseModule {
     fun provideMessageDao(chatDatabase: ChatDatabase): MessageDao = chatDatabase.messageDao()
 
     @Provides
+    fun provideAiMaskDao(chatDatabase: ChatDatabase): AiMaskDao = chatDatabase.aiMaskDao()
+
+    @Provides
     @Singleton
     fun provideChatDatabase(@ApplicationContext appContext: Context): ChatDatabase = Room.databaseBuilder(
         appContext,
         ChatDatabase::class.java,
         DB_NAME
-    ).build()
+    ).addMigrations(Migrations.MIGRATION_1_2)
+        .build()
 }

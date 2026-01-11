@@ -17,6 +17,7 @@ import androidx.navigation.navigation
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.presentation.ui.chat.ChatScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.home.HomeScreen
+import dev.chungjungsoo.gptmobile.presentation.ui.mask.AiMaskListScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.AboutScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.LicenseScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.PlatformSettingScreen
@@ -40,10 +41,17 @@ fun SetupNavGraph(navController: NavHostController) {
         startDestination = Route.CHAT_LIST
     ) {
         homeScreenNavigation(navController)
+        maskScreenNavigation(navController)
         startScreenNavigation(navController)
         setupNavigation(navController)
         settingNavigation(navController)
         chatScreenNavigation(navController)
+    }
+}
+
+fun NavGraphBuilder.maskScreenNavigation(navController: NavHostController) {
+    composable(Route.MASK_LIST) {
+        AiMaskListScreen(onBackAction = { navController.navigateUp() })
     }
 }
 
@@ -178,12 +186,15 @@ fun NavGraphBuilder.homeScreenNavigation(navController: NavHostController) {
     composable(Route.CHAT_LIST) {
         HomeScreen(
             settingOnClick = { navController.navigate(Route.SETTING_ROUTE) { launchSingleTop = true } },
+            maskListOnClick = { navController.navigate(Route.MASK_LIST) { launchSingleTop = true } },
             onExistingChatClick = { chatRoom ->
                 val enabledPlatformString = chatRoom.enabledPlatform.joinToString(",") { v -> v.name }
+                val maskId = chatRoom.maskId ?: -1
                 navController.navigate(
                     Route.CHAT_ROOM
                         .replace(oldValue = "{chatRoomId}", newValue = "${chatRoom.id}")
                         .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
+                        .replace(oldValue = "{maskId}", newValue = "$maskId")
                 )
             },
             navigateToNewChat = {
@@ -192,6 +203,16 @@ fun NavGraphBuilder.homeScreenNavigation(navController: NavHostController) {
                     Route.CHAT_ROOM
                         .replace(oldValue = "{chatRoomId}", newValue = "0")
                         .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
+                        .replace(oldValue = "{maskId}", newValue = "-1")
+                )
+            },
+            navigateToNewChatWithMask = { enabledPlatforms, maskId ->
+                val enabledPlatformString = enabledPlatforms.joinToString(",") { v -> v.name }
+                navController.navigate(
+                    Route.CHAT_ROOM
+                        .replace(oldValue = "{chatRoomId}", newValue = "0")
+                        .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
+                        .replace(oldValue = "{maskId}", newValue = "$maskId")
                 )
             }
         )
@@ -203,7 +224,8 @@ fun NavGraphBuilder.chatScreenNavigation(navController: NavHostController) {
         Route.CHAT_ROOM,
         arguments = listOf(
             navArgument("chatRoomId") { type = NavType.IntType },
-            navArgument("enabledPlatforms") { defaultValue = "" }
+            navArgument("enabledPlatforms") { defaultValue = "" },
+            navArgument("maskId") { type = NavType.IntType; defaultValue = -1 }
         )
     ) {
         ChatScreen(

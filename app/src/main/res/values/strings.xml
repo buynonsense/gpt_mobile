@@ -68,6 +68,19 @@
     <string name="cancel">Cancel</string>
     <string name="go_back">Go back</string>
     <string name="arrow_icon">Arrow Icon</string>
+    <string name="back">返回</string>
+    <string name="save">保存</string>
+
+    <string name="ai_mask_list">面具列表</string>
+    <string name="add_ai_mask">新增面具</string>
+    <string name="create_ai_mask">新建面具</string>
+    <string name="edit_ai_mask">编辑面具</string>
+    <string name="delete_ai_mask">删除面具</string>
+    <string name="delete_ai_mask_confirm">确定删除“%1$s”吗？</string>
+    <string name="search_ai_mask">查找面具</string>
+    <string name="ai_mask_name">面具名称</string>
+    <string name="ai_mask_system_prompt">系统提示词</string>
+    <string name="no_ai_masks">暂无面具</string>
     <string name="on">On</string>
     <string name="off">Off</string>
     <string name="system_default">System Default</string>

@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.rounded.Close
@@ -76,8 +77,10 @@ import dev.chungjungsoo.gptmobile.util.getPlatformTitleResources
 fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
     settingOnClick: () -> Unit,
+    maskListOnClick: () -> Unit,
     onExistingChatClick: (ChatRoom) -> Unit,
-    navigateToNewChat: (enabledPlatforms: List<ApiType>) -> Unit
+    navigateToNewChat: (enabledPlatforms: List<ApiType>) -> Unit,
+    navigateToNewChatWithMask: (enabledPlatforms: List<ApiType>, maskId: Int) -> Unit
 ) {
     val platformTitles = getPlatformTitleResources()
     val listState = rememberLazyListState()
@@ -86,6 +89,7 @@ fun HomeScreen(
     val showSelectModelDialog by homeViewModel.showSelectModelDialog.collectAsStateWithLifecycle()
     val showDeleteWarningDialog by homeViewModel.showDeleteWarningDialog.collectAsStateWithLifecycle()
     val platformState by homeViewModel.platformState.collectAsStateWithLifecycle()
+    val recentMasks by homeViewModel.recentMasks.collectAsStateWithLifecycle()
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     val lifecycleState by lifecycleOwner.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -94,6 +98,7 @@ fun HomeScreen(
         if (lifecycleState == Lifecycle.State.RESUMED && !chatListState.isSelectionMode) {
             homeViewModel.fetchChats()
             homeViewModel.fetchPlatformStatus()
+            homeViewModel.fetchRecentMasks()
         }
     }
 
@@ -117,20 +122,46 @@ fun HomeScreen(
                     }
                 },
                 navigationOnClick = {
-                    homeViewModel.disableSelectionMode()
+                    if (chatListState.isSelectionMode) {
+                        homeViewModel.disableSelectionMode()
+                    } else {
+                        maskListOnClick()
+                    }
                 }
             )
         },
         floatingActionButton = {
-            NewChatButton(expanded = listState.isScrollingUp(), onClick = {
-                val enabledApiTypes = platformState.filter { it.enabled }.map { it.name }
-                if (enabledApiTypes.size == 1) {
-                    // Navigate to new chat directly if only one platform is enabled
-                    navigateToNewChat(enabledApiTypes)
-                } else {
-                    homeViewModel.openSelectModelDialog()
+            Column(horizontalAlignment = Alignment.End) {
+                if (!chatListState.isSelectionMode) {
+                    recentMasks.forEach { mask ->
+                        ExtendedFloatingActionButton(
+                            modifier = Modifier.padding(bottom = 8.dp),
+                            onClick = {
+                                val enabledApiTypes = platformState.filter { it.enabled }.map { it.name }
+                                if (enabledApiTypes.isEmpty()) {
+                                    Toast.makeText(context, context.getString(R.string.enable_at_leat_one_platform), Toast.LENGTH_SHORT).show()
+                                    return@ExtendedFloatingActionButton
+                                }
+                                homeViewModel.touchMask(mask.id)
+                                navigateToNewChatWithMask(enabledApiTypes, mask.id)
+                            },
+                            expanded = listState.isScrollingUp(),
+                            icon = { Icon(Icons.Outlined.Face, contentDescription = stringResource(R.string.ai_mask_list)) },
+                            text = { Text(text = mask.name) }
+                        )
+                    }
                 }
-            })
+
+                NewChatButton(expanded = listState.isScrollingUp(), onClick = {
+                    val enabledApiTypes = platformState.filter { it.enabled }.map { it.name }
+                    if (enabledApiTypes.size == 1) {
+                        // Navigate to new chat directly if only one platform is enabled
+                        navigateToNewChat(enabledApiTypes)
+                    } else {
+                        homeViewModel.openSelectModelDialog()
+                    }
+                })
+            }
         }
     ) { innerPadding ->
         LazyColumn(
@@ -247,6 +278,16 @@ fun HomeTopAppBar(
                         imageVector = Icons.Rounded.Close,
                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                         contentDescription = stringResource(R.string.close)
+                    )
+                }
+            } else {
+                IconButton(
+                    modifier = Modifier.padding(4.dp),
+                    onClick = navigationOnClick
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Face,
+                        contentDescription = stringResource(R.string.ai_mask_list)
                     )
                 }
             }

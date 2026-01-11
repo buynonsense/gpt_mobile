@@ -4,8 +4,10 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.chungjungsoo.gptmobile.data.database.entity.AiMask
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
 import dev.chungjungsoo.gptmobile.data.dto.Platform
+import dev.chungjungsoo.gptmobile.data.repository.AiMaskRepository
 import dev.chungjungsoo.gptmobile.data.repository.ChatRepository
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import javax.inject.Inject
@@ -18,7 +20,8 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val chatRepository: ChatRepository,
-    private val settingRepository: SettingRepository
+    private val settingRepository: SettingRepository,
+    private val aiMaskRepository: AiMaskRepository
 ) : ViewModel() {
 
     data class ChatListState(
@@ -32,6 +35,9 @@ class HomeViewModel @Inject constructor(
 
     private val _platformState = MutableStateFlow(listOf<Platform>())
     val platformState: StateFlow<List<Platform>> = _platformState.asStateFlow()
+
+    private val _recentMasks = MutableStateFlow(listOf<AiMask>())
+    val recentMasks: StateFlow<List<AiMask>> = _recentMasks.asStateFlow()
 
     private val _showSelectModelDialog = MutableStateFlow(false)
     val showSelectModelDialog: StateFlow<Boolean> = _showSelectModelDialog.asStateFlow()
@@ -111,6 +117,19 @@ class HomeViewModel @Inject constructor(
             }
 
             Log.d("chats", "${_chatListState.value.chats}")
+        }
+    }
+
+    fun fetchRecentMasks() {
+        viewModelScope.launch {
+            _recentMasks.update { aiMaskRepository.fetchRecent(limit = 3) }
+        }
+    }
+
+    fun touchMask(maskId: Int) {
+        viewModelScope.launch {
+            aiMaskRepository.touch(maskId)
+            fetchRecentMasks()
         }
     }
 
