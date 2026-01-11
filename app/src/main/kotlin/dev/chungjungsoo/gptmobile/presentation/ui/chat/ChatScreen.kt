@@ -189,14 +189,24 @@ fun ChatScreen(
 
     val scope = rememberCoroutineScope()
 
-    // 监听用户滚动：只要用户把列表滚离底部，就关闭自动跟随。
+    // 监听滚动：
+    // - 用户手势上滑离开底部：立即关闭自动跟随（避免被强制拉回）
+    // - 用户回到底部（并停止滚动）：恢复自动跟随
     LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
+        snapshotFlow { Triple(listState.isScrollInProgress, listState.canScrollForward, isProgrammaticScroll) }
             .distinctUntilChanged()
-            .filter { inProgress -> !inProgress }
-            .collect {
-                if (!isProgrammaticScroll) {
-                    autoScrollEnabled = !listState.canScrollForward
+            .collect { (inProgress, canScrollForward, programmatic) ->
+                if (programmatic) return@collect
+
+                // 用户正在拖动且已经离开底部：立刻关闭自动跟随。
+                if (inProgress && canScrollForward) {
+                    autoScrollEnabled = false
+                    return@collect
+                }
+
+                // 用户停止滚动且位于底部：恢复自动跟随。
+                if (!inProgress && !canScrollForward) {
+                    autoScrollEnabled = true
                 }
             }
     }
@@ -223,7 +233,8 @@ fun ChatScreen(
             (ollamaMarkdownBlocks.size * 47 + (ollamaMarkdownBlocks.lastOrNull()?.content?.length ?: 0))
 
     LaunchedEffect(isIdle, streamingProgressFingerprint) {
-        if (autoScrollEnabled) {
+        // 用户正在手势滚动时不要抢滚动权。
+        if (autoScrollEnabled && !listState.isScrollInProgress) {
             // 高频更新下用非动画滚动更稳，避免抖动。
             scrollToBottom(animated = false)
         }

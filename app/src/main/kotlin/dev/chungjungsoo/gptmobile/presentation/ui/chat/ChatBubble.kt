@@ -124,6 +124,18 @@ fun OpponentChatBubble(
         label = "pendingAlpha"
     ).value
 
+    val pendingDots = streamTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pendingDots"
+    ).value
+
+    val loadingText = "Loading" + ".".repeat(pendingDots.toInt().coerceIn(0, 3))
+
     val appearedBlockIds = remember { mutableStateMapOf<String, Boolean>() }
 
     var lastCompletedBlockId by remember { mutableStateOf<String?>(null) }
@@ -166,7 +178,7 @@ fun OpponentChatBubble(
                             key(block.id) {
                                 val isLastPending = index == lastIndex && block.isPending
                                 val markdown = when (streamingStyle) {
-                                    StreamingStyle.TYPEWRITER -> if (isLastPending) block.content + "▊" else block.content
+                                    StreamingStyle.TYPEWRITER -> block.content
                                     StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> block.content
                                 }
 
@@ -203,10 +215,11 @@ fun OpponentChatBubble(
                             }
                         }
 
-                        if ((streamingStyle == StreamingStyle.FLASH || streamingStyle == StreamingStyle.FADE_IN_OUT) && hasPending) {
+                        // 生成中提示：始终固定在底部，避免“提示符跟着文本跑”。
+                        if (hasPending) {
                             Text(
                                 modifier = Modifier.alpha(pendingAlpha),
-                                text = "…",
+                                text = loadingText,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer
                             )
@@ -214,21 +227,31 @@ fun OpponentChatBubble(
                     }
                 } else {
                     val markdown = when (streamingStyle) {
-                        StreamingStyle.TYPEWRITER -> text.trimIndent() + if (isLoading) "▊" else ""
+                        StreamingStyle.TYPEWRITER -> text.trimIndent()
                         StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> text.trimIndent()
                     }
                     val alpha = when (streamingStyle) {
                         StreamingStyle.TYPEWRITER -> 1f
                         StreamingStyle.FLASH, StreamingStyle.FADE_IN_OUT -> if (isLoading) pendingAlpha else 1f
                     }
-                    MarkdownText(
-                        modifier = Modifier
-                            .padding(24.dp)
-                            .alpha(alpha),
-                        markdown = markdown,
-                        isTextSelectable = true,
-                        linkifyMask = Linkify.WEB_URLS
-                    )
+
+                    Column(modifier = Modifier.padding(24.dp)) {
+                        MarkdownText(
+                            modifier = Modifier.alpha(alpha),
+                            markdown = markdown,
+                            isTextSelectable = true,
+                            linkifyMask = Linkify.WEB_URLS
+                        )
+
+                        if (isLoading) {
+                            Text(
+                                modifier = Modifier.alpha(pendingAlpha),
+                                text = loadingText,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                    }
                 }
                 if (!isLoading) {
                     BrandText(apiType)
