@@ -166,44 +166,10 @@ fun ChatScreen(
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(scrollBehavior.nestedScrollConnection)
             .clickable(
                 indication = null,
                 interactionSource = remember { MutableInteractionSource() }
             ) { focusManager.clearFocus() },
-        topBar = {
-            AnimatedVisibility(
-                visible = isBarsVisible,
-                enter = slideInVertically(initialOffsetY = { -it }) + expandVertically(expandFrom = Alignment.Top) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { -it }) + shrinkVertically(shrinkTowards = Alignment.Top) + fadeOut()
-            ) {
-                ChatTopBar(
-                    chatRoom.title,
-                    chatRoom.id > 0,
-                    onBackAction,
-                    scrollBehavior,
-                    chatViewModel::openChatTitleDialog,
-                    onExportChatItemClick = { exportChat(context, chatViewModel) }
-                )
-            }
-        },
-        bottomBar = {
-            AnimatedVisibility(
-                visible = isBarsVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + expandVertically(expandFrom = Alignment.Bottom) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + shrinkVertically(shrinkTowards = Alignment.Bottom) + fadeOut()
-            ) {
-                ChatInputBox(
-                    value = question,
-                    onValueChange = { s -> chatViewModel.updateQuestion(s) },
-                    chatEnabled = canUseChat,
-                    sendButtonEnabled = question.trim().isNotBlank() && isIdle
-                ) {
-                    chatViewModel.askQuestion()
-                    focusManager.clearFocus()
-                }
-            }
-        },
         floatingActionButton = {
             if (listState.canScrollForward) {
                 ScrollToBottomButton {
@@ -215,14 +181,66 @@ fun ChatScreen(
         },
         floatingActionButtonPosition = FabPosition.Center
     ) { innerPadding ->
-        groupedMessages.forEach { (i, k) -> Log.d("grouped", "idx: $i, data: $k") }
-        LazyColumn(
-            modifier = Modifier.padding(innerPadding),
-            state = listState
-        ) {
-            groupedMessages.keys.sorted().forEach { key ->
-                if (key % 2 == 0) {
-                    // User
+        Box(modifier = Modifier.fillMaxSize()) {
+            groupedMessages.forEach { (i, k) -> Log.d("grouped", "idx: $i, data: $k") }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                    top = innerPadding.calculateTopPadding() + 64.dp,
+                    bottom = innerPadding.calculateBottomPadding() + 88.dp
+                )
+            ) {
+                groupedMessages.keys.sorted().forEach { key ->
+                    if (key % 2 == 0) {
+                        // User
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                            ) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                UserChatBubble(
+                                    modifier = Modifier.widthIn(max = maximumChatBubbleWidth),
+                                    text = groupedMessages[key]!![0].content,
+                                    isLoading = !isIdle,
+                                    onCopyClick = { clipboardManager.setText(AnnotatedString(groupedMessages[key]!![0].content.trim())) },
+                                    onEditClick = { chatViewModel.openEditQuestionDialog(groupedMessages[key]!![0]) }
+                                )
+                            }
+                        }
+                    } else {
+                        // Assistant
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(chatBubbleScrollStates[(key - 1) / 2])
+                            ) {
+                                Spacer(modifier = Modifier.width(8.dp))
+                                groupedMessages[key]!!.sortedBy { it.platformType }.forEach { m ->
+                                    m.platformType?.let { apiType ->
+                                        OpponentChatBubble(
+                                            modifier = Modifier
+                                                .padding(horizontal = 8.dp, vertical = 12.dp)
+                                                .width(maximumChatBubbleWidth),
+                                            canRetry = canUseChat && isIdle && key >= latestMessageIndex,
+                                            isLoading = false,
+                                            apiType = apiType,
+                                            text = m.content,
+                                            onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
+                                            onRetryClick = { chatViewModel.retryQuestion(m) }
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(systemChatMargin))
+                            }
+                        }
+                    }
+                }
+
+                if (!isIdle) {
                     item {
                         Row(
                             modifier = Modifier
@@ -232,36 +250,49 @@ fun ChatScreen(
                             Spacer(modifier = Modifier.weight(1f))
                             UserChatBubble(
                                 modifier = Modifier.widthIn(max = maximumChatBubbleWidth),
-                                text = groupedMessages[key]!![0].content,
-                                isLoading = !isIdle,
-                                onCopyClick = { clipboardManager.setText(AnnotatedString(groupedMessages[key]!![0].content.trim())) },
-                                onEditClick = { chatViewModel.openEditQuestionDialog(groupedMessages[key]!![0]) }
+                                text = userMessage.content,
+                                isLoading = true,
+                                onCopyClick = { clipboardManager.setText(AnnotatedString(userMessage.content.trim())) },
+                                onEditClick = { chatViewModel.openEditQuestionDialog(userMessage) }
                             )
                         }
                     }
-                } else {
-                    // Assistant
+
                     item {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .horizontalScroll(chatBubbleScrollStates[(key - 1) / 2])
+                                .horizontalScroll(chatBubbleScrollStates[(latestMessageIndex + 1) / 2])
                         ) {
                             Spacer(modifier = Modifier.width(8.dp))
-                            groupedMessages[key]!!.sortedBy { it.platformType }.forEach { m ->
-                                m.platformType?.let { apiType ->
-                                    OpponentChatBubble(
-                                        modifier = Modifier
-                                            .padding(horizontal = 8.dp, vertical = 12.dp)
-                                            .width(maximumChatBubbleWidth),
-                                        canRetry = canUseChat && isIdle && key >= latestMessageIndex,
-                                        isLoading = false,
-                                        apiType = apiType,
-                                        text = m.content,
-                                        onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
-                                        onRetryClick = { chatViewModel.retryQuestion(m) }
-                                    )
+                            chatViewModel.enabledPlatformsInChat.sorted().forEach { apiType ->
+                                val message = when (apiType) {
+                                    ApiType.OPENAI -> openAIMessage
+                                    ApiType.ANTHROPIC -> anthropicMessage
+                                    ApiType.GOOGLE -> googleMessage
+                                    ApiType.GROQ -> groqMessage
+                                    ApiType.OLLAMA -> ollamaMessage
                                 }
+
+                                val loadingState = when (apiType) {
+                                    ApiType.OPENAI -> openaiLoadingState
+                                    ApiType.ANTHROPIC -> anthropicLoadingState
+                                    ApiType.GOOGLE -> googleLoadingState
+                                    ApiType.GROQ -> groqLoadingState
+                                    ApiType.OLLAMA -> ollamaLoadingState
+                                }
+
+                                OpponentChatBubble(
+                                    modifier = Modifier
+                                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                                        .width(maximumChatBubbleWidth),
+                                    canRetry = canUseChat,
+                                    isLoading = loadingState == ChatViewModel.LoadingState.Loading,
+                                    apiType = apiType,
+                                    text = message.content,
+                                    onCopyClick = { clipboardManager.setText(AnnotatedString(message.content.trim())) },
+                                    onRetryClick = { chatViewModel.retryQuestion(message) }
+                                )
                             }
                             Spacer(modifier = Modifier.width(systemChatMargin))
                         }
@@ -269,62 +300,36 @@ fun ChatScreen(
                 }
             }
 
-            if (!isIdle) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                    ) {
-                        Spacer(modifier = Modifier.weight(1f))
-                        UserChatBubble(
-                            modifier = Modifier.widthIn(max = maximumChatBubbleWidth),
-                            text = userMessage.content,
-                            isLoading = true,
-                            onCopyClick = { clipboardManager.setText(AnnotatedString(userMessage.content.trim())) },
-                            onEditClick = { chatViewModel.openEditQuestionDialog(userMessage) }
-                        )
-                    }
-                }
+            AnimatedVisibility(
+                modifier = Modifier.align(Alignment.TopCenter),
+                visible = isBarsVisible,
+                enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
+            ) {
+                ChatTopBar(
+                    chatRoom.title,
+                    chatRoom.id > 0,
+                    onBackAction,
+                    scrollBehavior,
+                    chatViewModel::openChatTitleDialog,
+                    onExportChatItemClick = { exportChat(context, chatViewModel) }
+                )
+            }
 
-                item {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(chatBubbleScrollStates[(latestMessageIndex + 1) / 2])
-                    ) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        chatViewModel.enabledPlatformsInChat.sorted().forEach { apiType ->
-                            val message = when (apiType) {
-                                ApiType.OPENAI -> openAIMessage
-                                ApiType.ANTHROPIC -> anthropicMessage
-                                ApiType.GOOGLE -> googleMessage
-                                ApiType.GROQ -> groqMessage
-                                ApiType.OLLAMA -> ollamaMessage
-                            }
-
-                            val loadingState = when (apiType) {
-                                ApiType.OPENAI -> openaiLoadingState
-                                ApiType.ANTHROPIC -> anthropicLoadingState
-                                ApiType.GOOGLE -> googleLoadingState
-                                ApiType.GROQ -> groqLoadingState
-                                ApiType.OLLAMA -> ollamaLoadingState
-                            }
-
-                            OpponentChatBubble(
-                                modifier = Modifier
-                                    .padding(horizontal = 8.dp, vertical = 12.dp)
-                                    .width(maximumChatBubbleWidth),
-                                canRetry = canUseChat,
-                                isLoading = loadingState == ChatViewModel.LoadingState.Loading,
-                                apiType = apiType,
-                                text = message.content,
-                                onCopyClick = { clipboardManager.setText(AnnotatedString(message.content.trim())) },
-                                onRetryClick = { chatViewModel.retryQuestion(message) }
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(systemChatMargin))
-                    }
+            AnimatedVisibility(
+                modifier = Modifier.align(Alignment.BottomCenter),
+                visible = isBarsVisible,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
+                ChatInputBox(
+                    value = question,
+                    onValueChange = { s -> chatViewModel.updateQuestion(s) },
+                    chatEnabled = canUseChat,
+                    sendButtonEnabled = question.trim().isNotBlank() && isIdle
+                ) {
+                    chatViewModel.askQuestion()
+                    focusManager.clearFocus()
                 }
             }
         }
