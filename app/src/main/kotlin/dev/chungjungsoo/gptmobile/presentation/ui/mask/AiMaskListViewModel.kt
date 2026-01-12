@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.chungjungsoo.gptmobile.data.database.entity.AiMask
+import dev.chungjungsoo.gptmobile.data.dto.Platform
 import dev.chungjungsoo.gptmobile.data.repository.AiMaskRepository
+import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,11 +16,13 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class AiMaskListViewModel @Inject constructor(
-    private val aiMaskRepository: AiMaskRepository
+    private val aiMaskRepository: AiMaskRepository,
+    private val settingRepository: SettingRepository
 ) : ViewModel() {
 
     data class UiState(
         val masks: List<AiMask> = emptyList(),
+        val platformState: List<Platform> = emptyList(),
         val query: String = "",
         val isEditorOpen: Boolean = false,
         val editing: AiMask? = null,
@@ -37,7 +41,14 @@ class AiMaskListViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch {
             val masks = aiMaskRepository.fetchAll()
-            _uiState.update { it.copy(masks = masks) }
+            val platforms = settingRepository.fetchPlatforms()
+            _uiState.update { it.copy(masks = masks, platformState = platforms) }
+        }
+    }
+
+    fun touchMask(maskId: Int) {
+        viewModelScope.launch {
+            aiMaskRepository.touch(maskId)
         }
     }
 

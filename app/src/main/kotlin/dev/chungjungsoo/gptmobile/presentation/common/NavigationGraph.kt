@@ -51,7 +51,20 @@ fun SetupNavGraph(navController: NavHostController) {
 
 fun NavGraphBuilder.maskScreenNavigation(navController: NavHostController) {
     composable(Route.MASK_LIST) {
-        AiMaskListScreen(onBackAction = { navController.navigateUp() })
+        AiMaskListScreen(
+            onBackAction = { navController.navigateUp() },
+            onMaskUse = { enabledPlatforms, maskId ->
+                val enabledPlatformString = enabledPlatforms.joinToString(",") { v -> v.name }
+                navController.navigate(
+                    Route.CHAT_ROOM
+                        .replace(oldValue = "{chatRoomId}", newValue = "0")
+                        .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
+                        .replace(oldValue = "{maskId}", newValue = "$maskId")
+                ) {
+                    popUpTo(Route.CHAT_LIST)
+                }
+            }
+        )
     }
 }
 

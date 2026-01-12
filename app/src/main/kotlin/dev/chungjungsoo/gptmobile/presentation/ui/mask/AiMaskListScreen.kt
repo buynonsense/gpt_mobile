@@ -1,6 +1,7 @@
 package dev.chungjungsoo.gptmobile.presentation.ui.mask
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,18 +29,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chungjungsoo.gptmobile.R
+import dev.chungjungsoo.gptmobile.data.model.ApiType
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiMaskListScreen(
     onBackAction: () -> Unit,
+    onMaskUse: (enabledPlatforms: List<ApiType>, maskId: Int) -> Unit,
     viewModel: AiMaskListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val masks = viewModel.filteredMasks()
+    val context = LocalContext.current
 
     Scaffold(
         topBar = {
@@ -89,7 +96,23 @@ fun AiMaskListScreen(
                     ListItem(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.openEdit(mask) }
+                            .clickable {
+                                val enabledApiTypes = uiState.platformState
+                                    .filter { it.enabled }
+                                    .map { it.name }
+                                if (enabledApiTypes.isEmpty()) {
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            context.getString(R.string.enable_at_leat_one_platform),
+                                            Toast.LENGTH_SHORT
+                                        )
+                                        .show()
+                                    return@clickable
+                                }
+                                viewModel.touchMask(mask.id)
+                                onMaskUse(enabledApiTypes, mask.id)
+                            }
                             .padding(horizontal = 8.dp),
                         headlineContent = {
                             Text(text = mask.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -103,8 +126,19 @@ fun AiMaskListScreen(
                             )
                         },
                         trailingContent = {
-                            IconButton(onClick = { viewModel.requestDelete(mask) }) {
-                                Icon(imageVector = Icons.Outlined.Delete, contentDescription = stringResource(R.string.delete_ai_mask))
+                            Row {
+                                IconButton(onClick = { viewModel.openEdit(mask) }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Edit,
+                                        contentDescription = stringResource(R.string.edit_ai_mask)
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.requestDelete(mask) }) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Delete,
+                                        contentDescription = stringResource(R.string.delete_ai_mask)
+                                    )
+                                }
                             }
                         }
                     )
