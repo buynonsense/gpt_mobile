@@ -34,6 +34,6 @@ object DatabaseModule {
         appContext,
         ChatDatabase::class.java,
         DB_NAME
-    ).addMigrations(Migrations.MIGRATION_1_2)
+    ).addMigrations(Migrations.MIGRATION_1_2, Migrations.MIGRATION_2_3)
         .build()
 }

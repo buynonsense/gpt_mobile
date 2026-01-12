@@ -29,4 +29,10 @@ object Migrations {
             db.execSQL("ALTER TABLE chats ADD COLUMN system_prompt TEXT")
         }
     }
+
+    val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN model_name TEXT")
+        }
+    }
 }

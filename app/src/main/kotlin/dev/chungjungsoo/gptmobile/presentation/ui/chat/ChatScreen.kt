@@ -20,6 +20,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,8 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -153,11 +156,11 @@ fun ChatScreen(
     val ollamaMarkdownBlocks by chatViewModel.ollamaMarkdownBlocks.collectAsStateWithLifecycle()
 
     val streamingStyle by chatViewModel.streamingStyle.collectAsStateWithLifecycle()
+    val availableModels by chatViewModel.availableModels.collectAsStateWithLifecycle()
 
     val canUseChat = (chatViewModel.enabledPlatformsInChat.toSet() - appEnabledPlatforms.toSet()).isEmpty()
     val groupedMessages = remember(messages) { groupMessages(messages) }
     val latestMessageIndex = groupedMessages.keys.maxOrNull() ?: 0
-    val chatBubbleScrollStates = rememberSaveable(saver = multiScrollStateSaver) { DefaultHashMap<Int, ScrollState> { ScrollState(0) } }
     val canEnableAICoreMode = rememberSaveable { checkAICoreAvailability(aiCorePackageInfo, privateComputePackageInfo) }
     val context = LocalContext.current
     
@@ -283,35 +286,103 @@ fun ChatScreen(
                     } else {
                         // Assistant
                         item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(chatBubbleScrollStates[(key - 1) / 2])
-                            ) {
-                                Spacer(modifier = Modifier.width(8.dp))
-                                groupedMessages[key]!!.sortedBy { it.platformType }.forEach { m ->
-                                    m.platformType?.let { apiType ->
-                                                                            OpponentChatBubble(
-                                                                                modifier = Modifier
-                                                                                    .padding(horizontal = 8.dp, vertical = 12.dp)
-                                                                                    .width(maximumChatBubbleWidth),
-                                                                                canRetry = canUseChat && isIdle && key >= latestMessageIndex,
-                                                                                isLoading = false,
-                                                                                apiType = apiType,
-                                                                                text = m.content,
-                                                                                streamingStyle = streamingStyle,
-                                                                                onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
-                                                                                onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(m.content.trim()))) },
-                                                                                onRetryClick = { chatViewModel.retryQuestion(m) }
-                                                                            )                                    }
+                            val savedAssistantMessages = groupedMessages[key]!!.sortedBy { it.platformType }
+                            
+                            // Check if this group corresponds to the message currently being regenerated
+                            val groupUserMsg = groupedMessages[key - 1]?.firstOrNull()
+                            val isRegeneratingThis = !isIdle && groupUserMsg != null && groupUserMsg.id == userMessage.id && userMessage.id != 0
+
+                            val activeAssistantMessages = if (isRegeneratingThis) {
+                                chatViewModel.enabledPlatformsInChat.sorted().map { apiType ->
+                                    val msg = when (apiType) {
+                                        ApiType.OPENAI -> openAIMessage
+                                        ApiType.ANTHROPIC -> anthropicMessage
+                                        ApiType.GOOGLE -> googleMessage
+                                        ApiType.GROQ -> groqMessage
+                                        ApiType.OLLAMA -> ollamaMessage
+                                    }
+                                    msg.copy(platformType = apiType) // Ensure platformType is set
                                 }
-                                Spacer(modifier = Modifier.width(systemChatMargin))
+                            } else {
+                                emptyList()
+                            }
+                            
+                            val allAssistantMessages = savedAssistantMessages + activeAssistantMessages
+                            val pagerState = rememberPagerState(pageCount = { allAssistantMessages.size })
+                            
+                            // If regenerating, scroll to the new (last) page
+                            LaunchedEffect(isRegeneratingThis, allAssistantMessages.size) {
+                                if (isRegeneratingThis && allAssistantMessages.isNotEmpty()) {
+                                    pagerState.animateScrollToPage(allAssistantMessages.lastIndex)
+                                }
+                            }
+                            
+                            Column {
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Top
+                                ) { page ->
+                                    val m = allAssistantMessages[page]
+                                    m.platformType?.let { apiType ->
+                                        // Determine if this specific message is the one actively loading
+                                        val isThisMessageLoading = isRegeneratingThis && page >= savedAssistantMessages.size
+                                        
+                                        val markdownBlocks = if (isThisMessageLoading) {
+                                            when (apiType) {
+                                                ApiType.OPENAI -> openAIMarkdownBlocks
+                                                ApiType.ANTHROPIC -> anthropicMarkdownBlocks
+                                                ApiType.GOOGLE -> googleMarkdownBlocks
+                                                ApiType.GROQ -> groqMarkdownBlocks
+                                                ApiType.OLLAMA -> ollamaMarkdownBlocks
+                                            }
+                                        } else null
+
+                                        val loadingState = if (isThisMessageLoading) {
+                                            when (apiType) {
+                                                ApiType.OPENAI -> openaiLoadingState
+                                                ApiType.ANTHROPIC -> anthropicLoadingState
+                                                ApiType.GOOGLE -> googleLoadingState
+                                                ApiType.GROQ -> groqLoadingState
+                                                ApiType.OLLAMA -> ollamaLoadingState
+                                            }
+                                        } else ChatViewModel.LoadingState.Idle
+
+                                        OpponentChatBubble(
+                                            modifier = Modifier
+                                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                                .width(maximumChatBubbleWidth),
+                                            canRetry = canUseChat && isIdle && key >= latestMessageIndex && !isThisMessageLoading, // Disable retry on loading bubble
+                                            isLoading = loadingState == ChatViewModel.LoadingState.Loading,
+                                            apiType = apiType,
+                                            text = m.content,
+                                            modelName = m.modelName,
+                                            availableModels = availableModels[apiType] ?: emptyList(),
+                                            markdownBlocks = markdownBlocks,
+                                            streamingStyle = streamingStyle,
+                                            onCopyClick = { clipboardManager.setText(AnnotatedString(m.content.trim())) },
+                                            onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(m.content.trim()))) },
+                                            onRetryClick = { chatViewModel.retryQuestion(m) },
+                                            onModelSelected = { model -> chatViewModel.regenerateMessage(m, model) }
+                                        )
+                                    }
+                                }
+                                if (allAssistantMessages.size > 1) {
+                                    Text(
+                                        text = "${pagerState.currentPage + 1} / ${allAssistantMessages.size}",
+                                        modifier = Modifier
+                                            .align(Alignment.CenterHorizontally)
+                                            .padding(bottom = 8.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.outline
+                                    )
+                                }
                             }
                         }
                     }
                 }
 
-                if (!isIdle) {
+                if (!isIdle && userMessage.id == 0) {
                     item {
                         Row(
                             modifier = Modifier
@@ -330,13 +401,17 @@ fun ChatScreen(
                     }
 
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(chatBubbleScrollStates[(latestMessageIndex + 1) / 2])
-                        ) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            chatViewModel.enabledPlatformsInChat.sorted().forEach { apiType ->
+                        val enabledPlatforms = chatViewModel.enabledPlatformsInChat.sorted()
+                        val pagerState = rememberPagerState(pageCount = { enabledPlatforms.size })
+                        
+                        Column {
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.Top
+                            ) { page ->
+                                val apiType = enabledPlatforms[page]
+                                
                                 val message = when (apiType) {
                                     ApiType.OPENAI -> openAIMessage
                                     ApiType.ANTHROPIC -> anthropicMessage
@@ -363,20 +438,32 @@ fun ChatScreen(
 
                                 OpponentChatBubble(
                                     modifier = Modifier
-                                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                                        .padding(horizontal = 16.dp, vertical = 12.dp)
                                         .width(maximumChatBubbleWidth),
                                     canRetry = canUseChat,
                                     isLoading = loadingState == ChatViewModel.LoadingState.Loading,
                                     apiType = apiType,
                                     text = message.content,
+                                    modelName = message.modelName,
+                                    availableModels = availableModels[apiType] ?: emptyList(),
                                     markdownBlocks = markdownBlocks,
                                     streamingStyle = streamingStyle,
                                     onCopyClick = { clipboardManager.setText(AnnotatedString(message.content.trim())) },
                                     onCopyPlainTextClick = { clipboardManager.setText(AnnotatedString(dev.chungjungsoo.gptmobile.util.MarkdownUtils.stripMarkdown(message.content.trim()))) },
-                                    onRetryClick = { chatViewModel.retryQuestion(message) }
+                                    onRetryClick = { chatViewModel.retryQuestion(message) },
+                                    onModelSelected = { model -> chatViewModel.regenerateMessage(message, model) }
                                 )
                             }
-                            Spacer(modifier = Modifier.width(systemChatMargin))
+                            if (enabledPlatforms.size > 1) {
+                                Text(
+                                    text = "${pagerState.currentPage + 1} / ${enabledPlatforms.size}",
+                                    modifier = Modifier
+                                        .align(Alignment.CenterHorizontally)
+                                        .padding(bottom = 8.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.outline
+                                )
+                            }
                         }
                     }
                 }
@@ -475,31 +562,38 @@ private fun checkAICoreAvailability(aiCore: PackageInfo?, privateComputeServices
     return aiCoreCondition && privateComputeCondition
 }
 
-private fun groupMessages(messages: List<Message>): HashMap<Int, MutableList<Message>> {
-    val classifiedMessages = hashMapOf<Int, MutableList<Message>>()
-    var counter = 0
+private fun groupMessages(messages: List<Message>): Map<Int, List<Message>> {
+    val result = mutableMapOf<Int, MutableList<Message>>()
+    val userMessages = messages.filter { it.platformType == null }.sortedBy { it.createdAt }
+    val assistantMessages = messages.filter { it.platformType != null }
 
-    messages.sortedBy { it.createdAt }.forEach { message ->
-        if (message.platformType == null) {
-            if (classifiedMessages.containsKey(counter) || counter % 2 == 1) {
-                counter++
-            }
-
-            classifiedMessages[counter] = mutableListOf(message)
-            counter++
+    userMessages.forEachIndexed { index, userMsg ->
+        val groupIndex = index * 2
+        result[groupIndex] = mutableListOf(userMsg)
+        
+        // Find assistant messages linked to this user message
+        val linkedAnswers = if (userMsg.id > 0) {
+            assistantMessages.filter { it.linkedMessageId == userMsg.id }
         } else {
-            if (counter % 2 == 0) {
-                counter++
-            }
+            // If not saved yet, we might have to rely on order or temporary links
+            // For now, assume assistant messages following this user message in the original list are linked
+            emptyList()
+        }
+        
+        // Fallback for older messages without linkedMessageId
+        val answers = if (linkedAnswers.isEmpty()) {
+            val nextUserMsgCreatedAt = userMessages.getOrNull(index + 1)?.createdAt ?: Long.MAX_VALUE
+            assistantMessages.filter { it.createdAt > userMsg.createdAt && it.createdAt < nextUserMsgCreatedAt }
+        } else {
+            linkedAnswers
+        }
 
-            if (classifiedMessages.containsKey(counter)) {
-                classifiedMessages[counter]?.add(message)
-            } else {
-                classifiedMessages[counter] = mutableListOf(message)
-            }
+        if (answers.isNotEmpty()) {
+            result[groupIndex + 1] = answers.sortedBy { it.createdAt }.toMutableList()
         }
     }
-    return classifiedMessages
+    
+    return result
 }
 
 @Composable

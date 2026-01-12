@@ -122,6 +122,10 @@ class ChatViewModel @Inject constructor(
     private val _geminiNanoMessage = MutableStateFlow(Message(chatId = chatRoomId, content = "", platformType = null))
     val geminiNanoMessage = _geminiNanoMessage.asStateFlow()
 
+    // Available models for each platform
+    private val _availableModels = MutableStateFlow<Map<ApiType, List<String>>>(emptyMap())
+    val availableModels = _availableModels.asStateFlow()
+
     // Flows for assistant message streams
     private val openAIFlow = MutableSharedFlow<ApiState>()
     private val anthropicFlow = MutableSharedFlow<ApiState>()
@@ -214,7 +218,18 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch { fetchMessages() }
         fetchEnabledPlatformsInApp()
         fetchStreamingStyle()
+        fetchAvailableModels()
         observeFlow()
+    }
+
+    private fun fetchAvailableModels() {
+        viewModelScope.launch {
+            val models = mutableMapOf<ApiType, List<String>>()
+            enabledPlatformsInChat.forEach { apiType ->
+                models[apiType] = chatRepository.fetchModels(apiType)
+            }
+            _availableModels.update { models }
+        }
     }
 
     fun askQuestion() {
@@ -379,84 +394,161 @@ class ChatViewModel @Inject constructor(
         enabledPlatformsInChat.forEach { apiType -> updateLoadingState(apiType, LoadingState.Loading) }
         val enabledPlatforms = enabledPlatformsInChat.toSet()
 
-        if (ApiType.OPENAI in enabledPlatforms) {
-            resetStreamState(ApiType.OPENAI)
-            completeOpenAIChat()
-        }
+        viewModelScope.launch {
+            val platforms = settingRepository.fetchPlatforms()
+            if (ApiType.OPENAI in enabledPlatforms) {
+                val model = platforms.firstOrNull { it.name == ApiType.OPENAI }?.model
+                resetStreamState(ApiType.OPENAI)
+                _openAIMessage.update { it.copy(modelName = model) }
+                completeOpenAIChat()
+            }
 
-        if (ApiType.ANTHROPIC in enabledPlatforms) {
-            resetStreamState(ApiType.ANTHROPIC)
-            completeAnthropicChat()
-        }
+            if (ApiType.ANTHROPIC in enabledPlatforms) {
+                val model = platforms.firstOrNull { it.name == ApiType.ANTHROPIC }?.model
+                resetStreamState(ApiType.ANTHROPIC)
+                _anthropicMessage.update { it.copy(modelName = model) }
+                completeAnthropicChat()
+            }
 
-        if (ApiType.GOOGLE in enabledPlatforms) {
-            resetStreamState(ApiType.GOOGLE)
-            completeGoogleChat()
-        }
+            if (ApiType.GOOGLE in enabledPlatforms) {
+                val model = platforms.firstOrNull { it.name == ApiType.GOOGLE }?.model
+                resetStreamState(ApiType.GOOGLE)
+                _googleMessage.update { it.copy(modelName = model) }
+                completeGoogleChat()
+            }
 
-        if (ApiType.GROQ in enabledPlatforms) {
-            resetStreamState(ApiType.GROQ)
-            completeGroqChat()
-        }
+            if (ApiType.GROQ in enabledPlatforms) {
+                val model = platforms.firstOrNull { it.name == ApiType.GROQ }?.model
+                resetStreamState(ApiType.GROQ)
+                _groqMessage.update { it.copy(modelName = model) }
+                completeGroqChat()
+            }
 
-        if (ApiType.OLLAMA in enabledPlatforms) {
-            resetStreamState(ApiType.OLLAMA)
-            completeOllamaChat()
+            if (ApiType.OLLAMA in enabledPlatforms) {
+                val model = platforms.firstOrNull { it.name == ApiType.OLLAMA }?.model
+                resetStreamState(ApiType.OLLAMA)
+                _ollamaMessage.update { it.copy(modelName = model) }
+                completeOllamaChat()
+            }
         }
     }
 
-    private fun completeAnthropicChat() {
+    private fun completeAnthropicChat(question: Message = _userMessage.value, model: String? = null, history: List<Message> = _messages.value) {
         viewModelScope.launch {
             val chatFlow = chatRepository.completeAnthropicChat(
-                question = _userMessage.value,
-                history = _messages.value,
-                systemPrompt = _chatRoom.value.systemPrompt
+                question = question,
+                history = history,
+                systemPrompt = _chatRoom.value.systemPrompt,
+                model = model
             )
             chatFlow.collect { chunk -> anthropicFlow.emit(chunk) }
         }
     }
 
-    private fun completeGoogleChat() {
+    private fun completeGoogleChat(question: Message = _userMessage.value, model: String? = null, history: List<Message> = _messages.value) {
         viewModelScope.launch {
             val chatFlow = chatRepository.completeGoogleChat(
-                question = _userMessage.value,
-                history = _messages.value,
-                systemPrompt = _chatRoom.value.systemPrompt
+                question = question,
+                history = history,
+                systemPrompt = _chatRoom.value.systemPrompt,
+                model = model
             )
             chatFlow.collect { chunk -> googleFlow.emit(chunk) }
         }
     }
 
-    private fun completeGroqChat() {
+    private fun completeGroqChat(question: Message = _userMessage.value, model: String? = null, history: List<Message> = _messages.value) {
         viewModelScope.launch {
             val chatFlow = chatRepository.completeGroqChat(
-                question = _userMessage.value,
-                history = _messages.value,
-                systemPrompt = _chatRoom.value.systemPrompt
+                question = question,
+                history = history,
+                systemPrompt = _chatRoom.value.systemPrompt,
+                model = model
             )
             chatFlow.collect { chunk -> groqFlow.emit(chunk) }
         }
     }
 
-    private fun completeOllamaChat() {
+    private fun completeOllamaChat(question: Message = _userMessage.value, model: String? = null, history: List<Message> = _messages.value) {
         viewModelScope.launch {
             val chatFlow = chatRepository.completeOllamaChat(
-                question = _userMessage.value,
-                history = _messages.value,
-                systemPrompt = _chatRoom.value.systemPrompt
+                question = question,
+                history = history,
+                systemPrompt = _chatRoom.value.systemPrompt,
+                model = model
             )
             chatFlow.collect { chunk -> ollamaFlow.emit(chunk) }
         }
     }
 
-    private fun completeOpenAIChat() {
+    private fun completeOpenAIChat(question: Message = _userMessage.value, model: String? = null, history: List<Message> = _messages.value) {
         viewModelScope.launch {
             val chatFlow = chatRepository.completeOpenAIChat(
-                question = _userMessage.value,
-                history = _messages.value,
-                systemPrompt = _chatRoom.value.systemPrompt
+                question = question,
+                history = history,
+                systemPrompt = _chatRoom.value.systemPrompt,
+                model = model
             )
             chatFlow.collect { chunk -> openAIFlow.emit(chunk) }
+        }
+    }
+
+    fun regenerateMessage(message: Message, newModel: String) {
+        if (!_isIdle.value) return
+
+        // 1. Find the prompt (user message) for this message
+        // We look for the nearest preceding user message.
+        // If linkedMessageId is set, we use it. Otherwise we find by proximity.
+        val prompt = if (message.linkedMessageId > 0) {
+            _messages.value.firstOrNull { it.id == message.linkedMessageId }
+        } else {
+            _messages.value.filter { it.id < message.id && it.platformType == null }
+                .maxByOrNull { it.id }
+        } ?: _messages.value.lastOrNull { it.platformType == null }
+
+        if (prompt == null) return
+
+        // Update userMessage so that save logic in observeFlow works
+        _userMessage.update { prompt }
+
+        val apiType = message.platformType ?: return
+
+        // Set up for regeneration
+        updateLoadingState(apiType, LoadingState.Loading)
+        resetStreamState(apiType)
+
+        // Filter history to include only messages BEFORE the prompt to avoid duplication and future context
+        // Use createdAt for safe comparison, fallback to excluding the prompt itself if timestamps are identical
+        val history = _messages.value.filter { it.createdAt < prompt.createdAt || (it.createdAt == prompt.createdAt && it.id < prompt.id) }
+
+        // Update the message state with the new model name and linked message id
+        val linkedId = if (prompt.id > 0) prompt.id else -1 // Use -1 as temporary link if prompt is not saved yet
+
+        when (apiType) {
+            ApiType.OPENAI -> {
+                _openAIMessage.update { it.copy(content = "", modelName = newModel, linkedMessageId = linkedId) }
+                completeOpenAIChat(prompt, newModel, history)
+            }
+
+            ApiType.ANTHROPIC -> {
+                _anthropicMessage.update { it.copy(content = "", modelName = newModel, linkedMessageId = linkedId) }
+                completeAnthropicChat(prompt, newModel, history)
+            }
+
+            ApiType.GOOGLE -> {
+                _googleMessage.update { it.copy(content = "", modelName = newModel, linkedMessageId = linkedId) }
+                completeGoogleChat(prompt, newModel, history)
+            }
+
+            ApiType.GROQ -> {
+                _groqMessage.update { it.copy(content = "", modelName = newModel, linkedMessageId = linkedId) }
+                completeGroqChat(prompt, newModel, history)
+            }
+
+            ApiType.OLLAMA -> {
+                _ollamaMessage.update { it.copy(content = "", modelName = newModel, linkedMessageId = linkedId) }
+                completeOllamaChat(prompt, newModel, history)
+            }
         }
     }
 
@@ -646,27 +738,47 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun syncQuestionAndAnswers() {
-        addMessage(_userMessage.value)
+        val userMsg = _userMessage.value
+        if (userMsg.content.isNotBlank()) {
+            addMessage(userMsg)
+        }
+        
         val enabledPlatforms = enabledPlatformsInChat.toSet()
+        val promptId = if (userMsg.id > 0) userMsg.id else 0
 
         if (ApiType.OPENAI in enabledPlatforms) {
-            addMessage(_openAIMessage.value)
+            val msg = _openAIMessage.value
+            if (msg.content.isNotBlank()) {
+                addMessage(msg.copy(linkedMessageId = if (msg.linkedMessageId > 0) msg.linkedMessageId else promptId))
+            }
         }
 
         if (ApiType.ANTHROPIC in enabledPlatforms) {
-            addMessage(_anthropicMessage.value)
+            val msg = _anthropicMessage.value
+            if (msg.content.isNotBlank()) {
+                addMessage(msg.copy(linkedMessageId = if (msg.linkedMessageId > 0) msg.linkedMessageId else promptId))
+            }
         }
 
         if (ApiType.GOOGLE in enabledPlatforms) {
-            addMessage(_googleMessage.value)
+            val msg = _googleMessage.value
+            if (msg.content.isNotBlank()) {
+                addMessage(msg.copy(linkedMessageId = if (msg.linkedMessageId > 0) msg.linkedMessageId else promptId))
+            }
         }
 
         if (ApiType.GROQ in enabledPlatforms) {
-            addMessage(_groqMessage.value)
+            val msg = _groqMessage.value
+            if (msg.content.isNotBlank()) {
+                addMessage(msg.copy(linkedMessageId = if (msg.linkedMessageId > 0) msg.linkedMessageId else promptId))
+            }
         }
 
         if (ApiType.OLLAMA in enabledPlatforms) {
-            addMessage(_ollamaMessage.value)
+            val msg = _ollamaMessage.value
+            if (msg.content.isNotBlank()) {
+                addMessage(msg.copy(linkedMessageId = if (msg.linkedMessageId > 0) msg.linkedMessageId else promptId))
+            }
         }
     }
 

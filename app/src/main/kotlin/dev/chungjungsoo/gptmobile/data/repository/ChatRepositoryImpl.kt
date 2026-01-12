@@ -51,7 +51,7 @@ class ChatRepositoryImpl @Inject constructor(
     private lateinit var ollama: OpenAI
     private lateinit var groq: OpenAI
 
-    override suspend fun completeOpenAIChat(question: Message, history: List<Message>, systemPrompt: String?): Flow<ApiState> {
+    override suspend fun completeOpenAIChat(question: Message, history: List<Message>, systemPrompt: String?, model: String?): Flow<ApiState> {
         val platform = checkNotNull(settingRepository.fetchPlatforms().firstOrNull { it.name == ApiType.OPENAI })
         openAI = OpenAI(platform.token ?: "", host = OpenAIHost(baseUrl = platform.apiUrl))
 
@@ -64,7 +64,7 @@ class ChatRepositoryImpl @Inject constructor(
             ChatMessage(role = ChatRole.System, content = resolvedSystemPrompt)
         ) + generatedMessages
         val chatCompletionRequest = ChatCompletionRequest(
-            model = ModelId(platform.model ?: ""),
+            model = ModelId(model ?: platform.model ?: ""),
             messages = generatedMessageWithPrompt,
             temperature = platform.temperature?.toDouble(),
             topP = platform.topP?.toDouble()
@@ -77,7 +77,7 @@ class ChatRepositoryImpl @Inject constructor(
             .onCompletion { emit(ApiState.Done) }
     }
 
-    override suspend fun completeAnthropicChat(question: Message, history: List<Message>, systemPrompt: String?): Flow<ApiState> {
+    override suspend fun completeAnthropicChat(question: Message, history: List<Message>, systemPrompt: String?, model: String?): Flow<ApiState> {
         val platform = checkNotNull(settingRepository.fetchPlatforms().firstOrNull { it.name == ApiType.ANTHROPIC })
         anthropic.setToken(platform.token)
         anthropic.setAPIUrl(platform.apiUrl)
@@ -88,7 +88,7 @@ class ChatRepositoryImpl @Inject constructor(
 
         val generatedMessages = messageToAnthropicMessage(history + listOf(question))
         val messageRequest = MessageRequest(
-            model = platform.model ?: "",
+            model = model ?: platform.model ?: "",
             messages = generatedMessages,
             maxTokens = ModelConstants.ANTHROPIC_MAXIMUM_TOKEN,
             systemPrompt = resolvedSystemPrompt,
@@ -110,7 +110,7 @@ class ChatRepositoryImpl @Inject constructor(
             .onCompletion { emit(ApiState.Done) }
     }
 
-    override suspend fun completeGoogleChat(question: Message, history: List<Message>, systemPrompt: String?): Flow<ApiState> {
+    override suspend fun completeGoogleChat(question: Message, history: List<Message>, systemPrompt: String?, model: String?): Flow<ApiState> {
         val platform = checkNotNull(settingRepository.fetchPlatforms().firstOrNull { it.name == ApiType.GOOGLE })
 
         val resolvedSystemPrompt = systemPrompt?.takeIf { it.isNotBlank() }
@@ -121,7 +121,7 @@ class ChatRepositoryImpl @Inject constructor(
             topP = platform.topP
         }
         google = GenerativeModel(
-            modelName = platform.model ?: "",
+            modelName = model ?: platform.model ?: "",
             apiKey = platform.token ?: "",
             systemInstruction = content { text(resolvedSystemPrompt) },
             generationConfig = config,
@@ -141,7 +141,7 @@ class ChatRepositoryImpl @Inject constructor(
             .onCompletion { emit(ApiState.Done) }
     }
 
-    override suspend fun completeGroqChat(question: Message, history: List<Message>, systemPrompt: String?): Flow<ApiState> {
+    override suspend fun completeGroqChat(question: Message, history: List<Message>, systemPrompt: String?, model: String?): Flow<ApiState> {
         val platform = checkNotNull(settingRepository.fetchPlatforms().firstOrNull { it.name == ApiType.GROQ })
         groq = OpenAI(platform.token ?: "", host = OpenAIHost(baseUrl = platform.apiUrl))
 
@@ -154,7 +154,7 @@ class ChatRepositoryImpl @Inject constructor(
             ChatMessage(role = ChatRole.System, content = resolvedSystemPrompt)
         ) + generatedMessages
         val chatCompletionRequest = ChatCompletionRequest(
-            model = ModelId(platform.model ?: ""),
+            model = ModelId(model ?: platform.model ?: ""),
             messages = generatedMessageWithPrompt,
             temperature = platform.temperature?.toDouble(),
             topP = platform.topP?.toDouble()
@@ -167,7 +167,7 @@ class ChatRepositoryImpl @Inject constructor(
             .onCompletion { emit(ApiState.Done) }
     }
 
-    override suspend fun completeOllamaChat(question: Message, history: List<Message>, systemPrompt: String?): Flow<ApiState> {
+    override suspend fun completeOllamaChat(question: Message, history: List<Message>, systemPrompt: String?, model: String?): Flow<ApiState> {
         val platform = checkNotNull(settingRepository.fetchPlatforms().firstOrNull { it.name == ApiType.OLLAMA })
         ollama = OpenAI(platform.token ?: "", host = OpenAIHost(baseUrl = "${platform.apiUrl}v1/"))
 
@@ -180,7 +180,7 @@ class ChatRepositoryImpl @Inject constructor(
             ChatMessage(role = ChatRole.System, content = resolvedSystemPrompt)
         ) + generatedMessages
         val chatCompletionRequest = ChatCompletionRequest(
-            model = ModelId(platform.model ?: ""),
+            model = ModelId(model ?: platform.model ?: ""),
             messages = generatedMessageWithPrompt,
             temperature = platform.temperature?.toDouble(),
             topP = platform.topP?.toDouble()

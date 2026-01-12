@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -24,6 +25,8 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardColors
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -97,11 +100,14 @@ fun OpponentChatBubble(
     isError: Boolean = false,
     apiType: ApiType,
     text: String,
+    modelName: String? = null,
+    availableModels: List<String> = emptyList(),
     markdownBlocks: List<MarkdownBlock>? = null,
     streamingStyle: StreamingStyle = StreamingStyle.TYPEWRITER,
     onCopyClick: () -> Unit = {},
     onCopyPlainTextClick: () -> Unit = {},
-    onRetryClick: () -> Unit = {}
+    onRetryClick: () -> Unit = {},
+    onModelSelected: (String) -> Unit = {}
 ) {
     val cardColor = CardColors(
         containerColor = MaterialTheme.colorScheme.secondaryContainer,
@@ -109,6 +115,8 @@ fun OpponentChatBubble(
         disabledContentColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.38f),
         disabledContainerColor = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.38f)
     )
+
+    var isModelMenuExpanded by remember { mutableStateOf(false) }
 
     // “淡入淡出式”动画：
     // - 闪现：不显示 Pending 块内容，新完成块快速淡入，底部呼吸省略号表示“正在生成”
@@ -143,6 +151,32 @@ fun OpponentChatBubble(
     var fadeInDurationMs by remember { mutableStateOf(900) }
 
     Column(modifier = modifier) {
+        if (modelName != null) {
+            Box {
+                Text(
+                    modifier = Modifier
+                        .padding(start = 12.dp, bottom = 4.dp)
+                        .clickable { if (!isLoading) isModelMenuExpanded = true },
+                    text = modelName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                DropdownMenu(
+                    expanded = isModelMenuExpanded,
+                    onDismissRequest = { isModelMenuExpanded = false }
+                ) {
+                    availableModels.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text(model) },
+                            onClick = {
+                                onModelSelected(model)
+                                isModelMenuExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
         Column(modifier = Modifier.fillMaxWidth()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -387,6 +421,8 @@ fun OpponentChatBubblePreview() {
             canRetry = true,
             isLoading = false,
             apiType = ApiType.OPENAI,
+            modelName = "gpt-4o",
+            availableModels = listOf("gpt-4o", "gpt-3.5-turbo"),
             onCopyClick = {},
             onRetryClick = {}
         )
