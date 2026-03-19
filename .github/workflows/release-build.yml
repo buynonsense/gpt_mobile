@@ -37,6 +37,22 @@ jobs:
       - name: Build Unsigned Release App Bundle
         run: ./gradlew bundleRelease
 
+      - name: Validate Signing Secrets
+        env:
+          KEYSTORE_B64: ${{ secrets.APP_KEYSTORE }}
+          SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          SIGNING_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing_secrets=()
+          [[ -n "$KEYSTORE_B64" ]] || missing_secrets+=("APP_KEYSTORE")
+          [[ -n "$SIGNING_KEY_ALIAS" ]] || missing_secrets+=("KEY_ALIAS")
+          [[ -n "$SIGNING_PASSWORD" ]] || missing_secrets+=("KEY_PASSWORD")
+
+          if [ ${#missing_secrets[@]} -gt 0 ]; then
+            echo "Missing required GitHub secrets: ${missing_secrets[*]}" >&2
+            exit 1
+          fi
+
       - name: Generate Signing Key
         env:
           KEYSTORE_B64: ${{ secrets.APP_KEYSTORE }}
