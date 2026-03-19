@@ -8,6 +8,7 @@ import com.aallam.openai.api.chat.ChatRole
 import com.aallam.openai.api.model.ModelId
 import com.aallam.openai.client.OpenAI
 import com.aallam.openai.client.OpenAIHost
+import android.util.Log
 import com.google.ai.client.generativeai.GenerativeModel
 import com.google.ai.client.generativeai.type.BlockThreshold
 import com.google.ai.client.generativeai.type.Content
@@ -290,9 +291,9 @@ class ChatRepositoryImpl @Inject constructor(
     override suspend fun fetchModels(apiType: ApiType, platformConfig: dev.chungjungsoo.gptmobile.data.dto.Platform?): List<String> {
         return try {
             val platform = platformConfig ?: settingRepository.fetchPlatforms().firstOrNull { it.name == apiType } ?: return emptyList()
-            if (platform.token.isNullOrBlank()) return emptyList()
+            if (platform.token.isNullOrBlank()) return ModelConstants.getFallbackModels(apiType)
 
-            when (apiType) {
+            val fetchedModels = when (apiType) {
                 ApiType.OPENAI, ApiType.GROQ, ApiType.OLLAMA -> {
                     val hostUrl = if (apiType == ApiType.OLLAMA) "${platform.apiUrl}v1/" else platform.apiUrl
                     val client = OpenAI(platform.token, host = OpenAIHost(baseUrl = hostUrl))
@@ -307,9 +308,14 @@ class ChatRepositoryImpl @Inject constructor(
                     emptyList()
                 }
             }
+            fetchedModels.ifEmpty { ModelConstants.getFallbackModels(apiType) }
         } catch (e: Exception) {
-            e.printStackTrace()
-            emptyList()
+            Log.e(
+                "ChatRepository",
+                "Failed to fetch models for $apiType with apiUrl=${platformConfig?.apiUrl ?: "<null>"}",
+                e
+            )
+            ModelConstants.getFallbackModels(apiType)
         }
     }
 

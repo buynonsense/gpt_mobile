@@ -37,4 +37,41 @@ object ModelConstants {
             "The output must match the language that the user and the opponent is using, and should be less than 50 letters. " +
             "The output should only include the sentence in plain text without bullets or double asterisks. Do not use markdown syntax.\n" +
             "[Chat Content]\n"
+
+    fun getFallbackModels(apiType: ApiType): List<String> = when (apiType) {
+        ApiType.OPENAI -> listOf(
+            "gpt-4o",
+            "gpt-4o-mini",
+            "gpt-4-turbo",
+            "gpt-4"
+        )
+
+        ApiType.ANTHROPIC -> listOf(
+            "claude-3-5-sonnet-latest",
+            "claude-3-opus-latest",
+            "claude-3-sonnet-20240229",
+            "claude-3-haiku-20240307"
+        )
+
+        ApiType.GOOGLE -> listOf(
+            "gemini-1.5-pro",
+            "gemini-1.5-flash",
+            "gemini-1.0-pro"
+        )
+
+        ApiType.GROQ -> listOf(
+            "llama-3.2-3b-preview",
+            "llama-3.2-1b-preview",
+            "llama-3.1-70b-versatile",
+            "llama-3.1-8b-instant",
+            "gemma2-9b-it"
+        )
+
+        ApiType.OLLAMA -> listOf(
+            "llama3.1",
+            "qwen2.5",
+            "mistral",
+            "gemma2"
+        )
+    }
 }
