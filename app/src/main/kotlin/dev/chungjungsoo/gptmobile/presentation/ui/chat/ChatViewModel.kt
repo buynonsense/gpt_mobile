@@ -39,7 +39,16 @@ class ChatViewModel @Inject constructor(
     private val chatRoomId: Int = checkNotNull(savedStateHandle["chatRoomId"])
     private val enabledPlatformString: String = checkNotNull(savedStateHandle["enabledPlatforms"])
     private val maskId: Int = savedStateHandle["maskId"] ?: -1
-    val enabledPlatformsInChat = enabledPlatformString.split(',').map { s -> ApiType.valueOf(s) }
+    val enabledPlatformsInChat = enabledPlatformString
+        .split(',')
+        .mapNotNull { value ->
+            val normalizedValue = value.trim()
+            if (normalizedValue.isBlank()) {
+                null
+            } else {
+                ApiType.entries.firstOrNull { it.name == normalizedValue }
+            }
+        }
     private val currentTimeStamp: Long
         get() = System.currentTimeMillis() / 1000
 
@@ -584,7 +593,9 @@ class ChatViewModel @Inject constructor(
                 }
                 _chatRoom.update { room }
             } else {
-                _chatRoom.update { chatRepository.fetchChatList().first { it.id == chatRoomId } }
+                chatRepository.fetchChatRoom(chatRoomId)?.let { room ->
+                    _chatRoom.update { room }
+                }
             }
             Log.d("ViewModel", "chatroom: $chatRoom")
         }

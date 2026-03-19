@@ -17,10 +17,12 @@ import com.google.ai.client.generativeai.type.SafetySetting
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
 import dev.chungjungsoo.gptmobile.data.ModelConstants
+import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
 import dev.chungjungsoo.gptmobile.data.database.dao.MessageDao
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
 import dev.chungjungsoo.gptmobile.data.database.entity.Message
+import dev.chungjungsoo.gptmobile.data.database.projection.MessageSearchResult
 import dev.chungjungsoo.gptmobile.data.dto.ApiState
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.common.MessageRole
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.common.TextContent
@@ -30,6 +32,7 @@ import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.ContentDeltaRespon
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.ErrorResponseChunk
 import dev.chungjungsoo.gptmobile.data.dto.anthropic.response.MessageResponseChunk
 import dev.chungjungsoo.gptmobile.data.model.ApiType
+import dev.chungjungsoo.gptmobile.data.model.RoleDefaults
 import dev.chungjungsoo.gptmobile.data.network.AnthropicAPI
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +43,7 @@ import kotlinx.coroutines.flow.onStart
 
 class ChatRepositoryImpl @Inject constructor(
     private val appContext: Context,
+    private val aiMaskDao: AiMaskDao,
     private val chatRoomDao: ChatRoomDao,
     private val messageDao: MessageDao,
     private val settingRepository: SettingRepository,
@@ -195,7 +199,49 @@ class ChatRepositoryImpl @Inject constructor(
 
     override suspend fun fetchChatList(): List<ChatRoom> = chatRoomDao.getChatRooms()
 
+    override suspend fun fetchChatRoom(chatId: Int): ChatRoom? = chatRoomDao.getById(chatId)
+
+    override suspend fun fetchArchivedChatList(): List<ChatRoom> = chatRoomDao.getArchivedChatRooms()
+
     override suspend fun fetchMessages(chatId: Int): List<Message> = messageDao.loadMessages(chatId)
+
+    override suspend fun findOrCreateChatForRole(roleId: Int, enabledPlatforms: List<ApiType>?): ChatRoom {
+        val role = aiMaskDao.getById(roleId)
+        val resolvedRole = role ?: aiMaskDao.getDefault()
+            ?: error("默认角色不存在，且无法按 roleId=$roleId 找到角色")
+        val activePlatforms = enabledPlatforms ?: fetchEnabledPlatforms()
+        val existingChat = if (resolvedRole.isDefault) {
+            chatRoomDao.getLatestActiveDefaultChat()
+        } else {
+            chatRoomDao.getLatestActiveChatByMaskId(resolvedRole.id)
+        }
+
+        if (existingChat != null) {
+            if (!resolvedRole.isDefault) {
+                aiMaskDao.touch(resolvedRole.id, System.currentTimeMillis() / 1000)
+            }
+            return existingChat
+        }
+
+        val newChat = ChatRoom(
+            title = if (resolvedRole.isDefault) RoleDefaults.DEFAULT_ROLE_NAME else resolvedRole.name,
+            enabledPlatform = activePlatforms,
+            maskId = resolvedRole.takeUnless { it.isDefault }?.id,
+            maskName = resolvedRole.name,
+            systemPrompt = resolvedRole.systemPrompt.takeIf { it.isNotBlank() }
+        )
+        val chatId = chatRoomDao.addChatRoom(newChat).toInt()
+        if (!resolvedRole.isDefault) {
+            aiMaskDao.touch(resolvedRole.id, System.currentTimeMillis() / 1000)
+        }
+        return newChat.copy(id = chatId)
+    }
+
+    override suspend fun searchMessages(query: String, limit: Int): List<MessageSearchResult> {
+        val trimmedQuery = query.trim()
+        if (trimmedQuery.isBlank()) return emptyList()
+        return messageDao.searchMessages(trimmedQuery, limit)
+    }
 
     override fun generateDefaultChatTitle(messages: List<Message>): String? = messages.sortedBy { it.createdAt }.firstOrNull { it.platformType == null }?.content?.replace('\n', ' ')?.take(50)
 
@@ -265,6 +311,13 @@ class ChatRepositoryImpl @Inject constructor(
             e.printStackTrace()
             emptyList()
         }
+    }
+
+    private suspend fun fetchEnabledPlatforms(): List<ApiType> {
+        return settingRepository.fetchPlatforms()
+            .filter { it.enabled }
+            .map { it.name }
+            .ifEmpty { listOf(ApiType.OPENAI) }
     }
 
     private fun messageToOpenAICompatibleMessage(apiType: ApiType, messages: List<Message>): List<ChatMessage> {

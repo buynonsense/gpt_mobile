@@ -2,6 +2,7 @@ package dev.chungjungsoo.gptmobile.data.repository
 
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
 import dev.chungjungsoo.gptmobile.data.database.entity.Message
+import dev.chungjungsoo.gptmobile.data.database.projection.MessageSearchResult
 import dev.chungjungsoo.gptmobile.data.dto.ApiState
 import dev.chungjungsoo.gptmobile.data.model.ApiType
 import kotlinx.coroutines.flow.Flow
@@ -13,8 +14,12 @@ interface ChatRepository {
     suspend fun completeGoogleChat(question: Message, history: List<Message>, systemPrompt: String? = null, model: String? = null): Flow<ApiState>
     suspend fun completeGroqChat(question: Message, history: List<Message>, systemPrompt: String? = null, model: String? = null): Flow<ApiState>
     suspend fun completeOllamaChat(question: Message, history: List<Message>, systemPrompt: String? = null, model: String? = null): Flow<ApiState>
+    suspend fun fetchChatRoom(chatId: Int): ChatRoom?
     suspend fun fetchChatList(): List<ChatRoom>
+    suspend fun fetchArchivedChatList(): List<ChatRoom>
     suspend fun fetchMessages(chatId: Int): List<Message>
+    suspend fun findOrCreateChatForRole(roleId: Int, enabledPlatforms: List<ApiType>? = null): ChatRoom
+    suspend fun searchMessages(query: String, limit: Int = 100): List<MessageSearchResult>
     fun generateDefaultChatTitle(messages: List<Message>): String?
     suspend fun updateChatTitle(chatRoom: ChatRoom, title: String)
     suspend fun saveChat(chatRoom: ChatRoom, messages: List<Message>): ChatRoom

@@ -212,4 +212,25 @@
     <string name="streaming_style_fade">淡入淡出</string>
     <string name="expand_input">Expand input</string>
     <string name="collapse_input">Collapse input</string>
+    <string name="roles">Roles</string>
+    <string name="create_role">Create Role</string>
+    <string name="edit_role">Edit Role</string>
+    <string name="archive_role">Archive Role</string>
+    <string name="archive_role_confirm">Archive “%1$s” and all its chats?</string>
+    <string name="archived_roles">Archived Roles</string>
+    <string name="restore_role">Restore Role</string>
+    <string name="delete_permanently">Delete Permanently</string>
+    <string name="delete_permanently_confirm">Delete “%1$s” permanently from archive?</string>
+    <string name="role_management">Role Management</string>
+    <string name="search_roles">Search Roles</string>
+    <string name="search_messages">Search Messages</string>
+    <string name="search_messages_hint">Search all chat messages</string>
+    <string name="search_result_meta">%1$s · %2$s</string>
+    <string name="role_name">Role Name</string>
+    <string name="role_group">Group</string>
+    <string name="role_group_value">Group: %1$s</string>
+    <string name="role_system_prompt">System Prompt</string>
+    <string name="no_roles">No roles yet</string>
+    <string name="default_role_description">General-purpose chat without a system prompt.</string>
+    <string name="default_role_badge">Default</string>
 </resources>

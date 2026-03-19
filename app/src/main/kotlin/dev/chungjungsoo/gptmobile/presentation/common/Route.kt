@@ -20,6 +20,8 @@ object Route {
     const val CHAT_ROOM = "chat_room/{chatRoomId}?enabled={enabledPlatforms}&maskId={maskId}"
 
     const val MASK_LIST = "mask_list"
+    const val MESSAGE_SEARCH = "message_search"
+    const val ARCHIVE_LIST = "archive_list"
 
     const val SETTING_ROUTE = "setting_route"
     const val SETTINGS = "settings"

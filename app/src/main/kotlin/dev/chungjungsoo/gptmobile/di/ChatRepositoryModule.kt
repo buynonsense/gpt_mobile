@@ -6,6 +6,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
 import dev.chungjungsoo.gptmobile.data.database.dao.MessageDao
 import dev.chungjungsoo.gptmobile.data.network.AnthropicAPI
@@ -22,9 +23,10 @@ object ChatRepositoryModule {
     @Singleton
     fun provideChatRepository(
         @ApplicationContext appContext: Context,
+        aiMaskDao: AiMaskDao,
         chatRoomDao: ChatRoomDao,
         messageDao: MessageDao,
         settingRepository: SettingRepository,
         anthropicAPI: AnthropicAPI
-    ): ChatRepository = ChatRepositoryImpl(appContext, chatRoomDao, messageDao, settingRepository, anthropicAPI)
+    ): ChatRepository = ChatRepositoryImpl(appContext, aiMaskDao, chatRoomDao, messageDao, settingRepository, anthropicAPI)
 }

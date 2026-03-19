@@ -4,9 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.chungjungsoo.gptmobile.data.database.entity.AiMask
-import dev.chungjungsoo.gptmobile.data.dto.Platform
+import dev.chungjungsoo.gptmobile.data.model.RoleDefaults
 import dev.chungjungsoo.gptmobile.data.repository.AiMaskRepository
-import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,19 +15,18 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class AiMaskListViewModel @Inject constructor(
-    private val aiMaskRepository: AiMaskRepository,
-    private val settingRepository: SettingRepository
+    private val aiMaskRepository: AiMaskRepository
 ) : ViewModel() {
 
     data class UiState(
-        val masks: List<AiMask> = emptyList(),
-        val platformState: List<Platform> = emptyList(),
+        val roles: List<AiMask> = emptyList(),
         val query: String = "",
         val isEditorOpen: Boolean = false,
         val editing: AiMask? = null,
         val editorName: String = "",
         val editorSystemPrompt: String = "",
-        val pendingDelete: AiMask? = null
+        val editorGroupName: String = RoleDefaults.UNGROUPED_ROLE_NAME,
+        val pendingArchive: AiMask? = null
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -40,15 +38,8 @@ class AiMaskListViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            val masks = aiMaskRepository.fetchAll()
-            val platforms = settingRepository.fetchPlatforms()
-            _uiState.update { it.copy(masks = masks, platformState = platforms) }
-        }
-    }
-
-    fun touchMask(maskId: Int) {
-        viewModelScope.launch {
-            aiMaskRepository.touch(maskId)
+            val roles = aiMaskRepository.fetchAll()
+            _uiState.update { it.copy(roles = roles) }
         }
     }
 
@@ -62,18 +53,20 @@ class AiMaskListViewModel @Inject constructor(
                 isEditorOpen = true,
                 editing = null,
                 editorName = "",
-                editorSystemPrompt = ""
+                editorSystemPrompt = "",
+                editorGroupName = RoleDefaults.UNGROUPED_ROLE_NAME
             )
         }
     }
 
-    fun openEdit(mask: AiMask) {
+    fun openEdit(role: AiMask) {
         _uiState.update {
             it.copy(
                 isEditorOpen = true,
-                editing = mask,
-                editorName = mask.name,
-                editorSystemPrompt = mask.systemPrompt
+                editing = role,
+                editorName = role.name,
+                editorSystemPrompt = role.systemPrompt,
+                editorGroupName = role.groupName
             )
         }
     }
@@ -90,49 +83,48 @@ class AiMaskListViewModel @Inject constructor(
         _uiState.update { it.copy(editorSystemPrompt = v) }
     }
 
+    fun updateEditorGroupName(v: String) {
+        _uiState.update { it.copy(editorGroupName = v) }
+    }
+
     fun saveEditor() {
         val name = _uiState.value.editorName.trim()
-        val prompt = _uiState.value.editorSystemPrompt.trim()
-        if (name.isBlank() || prompt.isBlank()) return
+        if (name.isBlank()) return
 
         viewModelScope.launch {
-            val editingId = _uiState.value.editing?.id
-            val saved = aiMaskRepository.upsert(id = editingId, name = name, systemPrompt = prompt)
-
-            _uiState.update {
-                val nextMasks = listOf(saved) + it.masks.filter { m -> m.id != saved.id }
-                it.copy(
-                    masks = nextMasks,
-                    query = "",
-                    isEditorOpen = false,
-                    editing = null
-                )
-            }
-
+            aiMaskRepository.upsert(
+                id = _uiState.value.editing?.id,
+                name = name,
+                systemPrompt = _uiState.value.editorSystemPrompt,
+                groupName = _uiState.value.editorGroupName
+            )
+            _uiState.update { it.copy(isEditorOpen = false, editing = null, query = "") }
             refresh()
         }
     }
 
-    fun requestDelete(mask: AiMask) {
-        _uiState.update { it.copy(pendingDelete = mask) }
+    fun requestArchive(role: AiMask) {
+        _uiState.update { it.copy(pendingArchive = role) }
     }
 
-    fun cancelDelete() {
-        _uiState.update { it.copy(pendingDelete = null) }
+    fun cancelArchive() {
+        _uiState.update { it.copy(pendingArchive = null) }
     }
 
-    fun confirmDelete() {
-        val target = _uiState.value.pendingDelete ?: return
+    fun confirmArchive() {
+        val target = _uiState.value.pendingArchive ?: return
         viewModelScope.launch {
-            aiMaskRepository.delete(target.id)
-            _uiState.update { it.copy(pendingDelete = null) }
+            aiMaskRepository.archive(target.id)
+            _uiState.update { it.copy(pendingArchive = null) }
             refresh()
         }
     }
 
-    fun filteredMasks(): List<AiMask> {
+    fun filteredRoles(): List<AiMask> {
         val q = _uiState.value.query.trim()
-        if (q.isBlank()) return _uiState.value.masks
-        return _uiState.value.masks.filter { it.name.contains(q, ignoreCase = true) }
+        if (q.isBlank()) return _uiState.value.roles
+        return _uiState.value.roles.filter {
+            it.name.contains(q, ignoreCase = true) || it.groupName.contains(q, ignoreCase = true)
+        }
     }
 }

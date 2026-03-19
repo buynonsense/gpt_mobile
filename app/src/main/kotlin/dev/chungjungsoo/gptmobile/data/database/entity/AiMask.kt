@@ -19,6 +19,15 @@ data class AiMask(
     @ColumnInfo(name = "system_prompt")
     val systemPrompt: String,
 
+    @ColumnInfo(name = "group_name")
+    val groupName: String = "未分组",
+
+    @ColumnInfo(name = "is_default")
+    val isDefault: Boolean = false,
+
+    @ColumnInfo(name = "is_archived")
+    val isArchived: Boolean = false,
+
     @ColumnInfo(name = "updated_at")
     val updatedAt: Long = System.currentTimeMillis() / 1000,
 

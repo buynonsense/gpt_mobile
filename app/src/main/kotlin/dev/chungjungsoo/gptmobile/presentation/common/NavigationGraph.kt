@@ -15,9 +15,11 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import dev.chungjungsoo.gptmobile.data.model.ApiType
+import dev.chungjungsoo.gptmobile.presentation.ui.archive.ArchiveScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.chat.ChatScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.home.HomeScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.mask.AiMaskListScreen
+import dev.chungjungsoo.gptmobile.presentation.ui.search.MessageSearchScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.AboutScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.LicenseScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.PlatformSettingScreen
@@ -42,6 +44,8 @@ fun SetupNavGraph(navController: NavHostController) {
     ) {
         homeScreenNavigation(navController)
         maskScreenNavigation(navController)
+        archiveNavigation(navController)
+        searchNavigation(navController)
         startScreenNavigation(navController)
         setupNavigation(navController)
         settingNavigation(navController)
@@ -53,16 +57,28 @@ fun NavGraphBuilder.maskScreenNavigation(navController: NavHostController) {
     composable(Route.MASK_LIST) {
         AiMaskListScreen(
             onBackAction = { navController.navigateUp() },
-            onMaskUse = { enabledPlatforms, maskId ->
-                val enabledPlatformString = enabledPlatforms.joinToString(",") { v -> v.name }
+            onOpenArchive = { navController.navigate(Route.ARCHIVE_LIST) }
+        )
+    }
+}
+
+fun NavGraphBuilder.archiveNavigation(navController: NavHostController) {
+    composable(Route.ARCHIVE_LIST) {
+        ArchiveScreen(onBackAction = { navController.navigateUp() })
+    }
+}
+
+fun NavGraphBuilder.searchNavigation(navController: NavHostController) {
+    composable(Route.MESSAGE_SEARCH) {
+        MessageSearchScreen(
+            onBackAction = { navController.navigateUp() },
+            onOpenChat = { result ->
                 navController.navigate(
                     Route.CHAT_ROOM
-                        .replace(oldValue = "{chatRoomId}", newValue = "0")
-                        .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
-                        .replace(oldValue = "{maskId}", newValue = "$maskId")
-                ) {
-                    popUpTo(Route.CHAT_LIST)
-                }
+                        .replace(oldValue = "{chatRoomId}", newValue = "${result.chatId}")
+                        .replace(oldValue = "{enabledPlatforms}", newValue = result.enabledPlatformsArgument())
+                        .replace(oldValue = "{maskId}", newValue = "${result.maskId ?: -1}")
+                )
             }
         )
     }
@@ -199,31 +215,14 @@ fun NavGraphBuilder.homeScreenNavigation(navController: NavHostController) {
     composable(Route.CHAT_LIST) {
         HomeScreen(
             settingOnClick = { navController.navigate(Route.SETTING_ROUTE) { launchSingleTop = true } },
-            maskListOnClick = { navController.navigate(Route.MASK_LIST) { launchSingleTop = true } },
-            onExistingChatClick = { chatRoom ->
+            searchOnClick = { navController.navigate(Route.MESSAGE_SEARCH) { launchSingleTop = true } },
+            roleManagerOnClick = { navController.navigate(Route.MASK_LIST) { launchSingleTop = true } },
+            onChatResolved = { chatRoom ->
                 val enabledPlatformString = chatRoom.enabledPlatform.joinToString(",") { v -> v.name }
                 val maskId = chatRoom.maskId ?: -1
                 navController.navigate(
                     Route.CHAT_ROOM
                         .replace(oldValue = "{chatRoomId}", newValue = "${chatRoom.id}")
-                        .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
-                        .replace(oldValue = "{maskId}", newValue = "$maskId")
-                )
-            },
-            navigateToNewChat = {
-                val enabledPlatformString = it.joinToString(",") { v -> v.name }
-                navController.navigate(
-                    Route.CHAT_ROOM
-                        .replace(oldValue = "{chatRoomId}", newValue = "0")
-                        .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
-                        .replace(oldValue = "{maskId}", newValue = "-1")
-                )
-            },
-            navigateToNewChatWithMask = { enabledPlatforms, maskId ->
-                val enabledPlatformString = enabledPlatforms.joinToString(",") { v -> v.name }
-                navController.navigate(
-                    Route.CHAT_ROOM
-                        .replace(oldValue = "{chatRoomId}", newValue = "0")
                         .replace(oldValue = "{enabledPlatforms}", newValue = enabledPlatformString)
                         .replace(oldValue = "{maskId}", newValue = "$maskId")
                 )

@@ -11,7 +11,7 @@ import dev.chungjungsoo.gptmobile.data.database.entity.AiMask
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
 import dev.chungjungsoo.gptmobile.data.database.entity.Message
 
-@Database(entities = [ChatRoom::class, Message::class, AiMask::class], version = 3)
+@Database(entities = [ChatRoom::class, Message::class, AiMask::class], version = 4)
 @TypeConverters(APITypeConverter::class)
 abstract class ChatDatabase : RoomDatabase() {
 

@@ -154,4 +154,25 @@
     <string name="edit_question">编辑用户信息</string>
     <string name="user_message">用户消息</string>
     <string name="export_chat">导出会话</string>
+    <string name="roles">角色</string>
+    <string name="create_role">创建角色</string>
+    <string name="edit_role">编辑角色</string>
+    <string name="archive_role">归档角色</string>
+    <string name="archive_role_confirm">确认归档“%1$s”及其全部历史会话吗？</string>
+    <string name="archived_roles">已归档角色</string>
+    <string name="restore_role">恢复角色</string>
+    <string name="delete_permanently">永久删除</string>
+    <string name="delete_permanently_confirm">确认从归档中永久删除“%1$s”吗？</string>
+    <string name="role_management">角色管理</string>
+    <string name="search_roles">搜索角色</string>
+    <string name="search_messages">搜索消息</string>
+    <string name="search_messages_hint">模糊搜索全部历史消息</string>
+    <string name="search_result_meta">%1$s · %2$s</string>
+    <string name="role_name">角色名称</string>
+    <string name="role_group">分组</string>
+    <string name="role_group_value">分组：%1$s</string>
+    <string name="role_system_prompt">系统提示词</string>
+    <string name="no_roles">暂无角色</string>
+    <string name="default_role_description">无 system prompt 的通用聊天入口。</string>
+    <string name="default_role_badge">默认</string>
 </resources>

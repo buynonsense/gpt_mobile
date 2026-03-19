@@ -30,6 +30,9 @@ data class ChatRoom(
     @ColumnInfo(name = "system_prompt")
     val systemPrompt: String? = null,
 
+    @ColumnInfo(name = "is_archived")
+    val isArchived: Boolean = false,
+
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis() / 1000
 ) : Parcelable
