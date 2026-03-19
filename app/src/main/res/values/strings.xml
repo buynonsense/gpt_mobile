@@ -210,4 +210,6 @@
     <string name="streaming_style_typewriter">打字机</string>
     <string name="streaming_style_flash">闪现</string>
     <string name="streaming_style_fade">淡入淡出</string>
+    <string name="expand_input">Expand input</string>
+    <string name="collapse_input">Collapse input</string>
 </resources>

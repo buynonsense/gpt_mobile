@@ -16,12 +16,9 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,11 +35,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.OpenInFull
 import androidx.compose.material3.BottomAppBarDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -55,7 +54,10 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SmallFloatingActionButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
@@ -72,7 +74,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -83,9 +84,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider.getUriForFile
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -173,6 +177,7 @@ fun ChatScreen(
     // - 用户回到底部/点击“到底部”按钮后置为 true
     var autoScrollEnabled by rememberSaveable { mutableStateOf(true) }
     var isProgrammaticScroll by remember { mutableStateOf(false) }
+    var isFullScreenInputOpen by rememberSaveable { mutableStateOf(false) }
 
     val bottomItemIndex by remember { derivedStateOf { (listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0) } }
 
@@ -246,12 +251,7 @@ fun ChatScreen(
     Log.d("AIPackage", "AICore: ${aiCorePackageInfo?.versionName ?: "Not installed"}, Private Compute Services: ${privateComputePackageInfo?.versionName ?: "Not installed"}")
 
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .clickable(
-                indication = null,
-                interactionSource = remember { MutableInteractionSource() }
-            ) { focusManager.clearFocus() },
+        modifier = Modifier.fillMaxSize()
         // Floating action button moved to Box
     ) { innerPadding ->
         Box(modifier = Modifier.fillMaxSize()) {
@@ -516,12 +516,26 @@ fun ChatScreen(
                     value = question,
                     onValueChange = { s -> chatViewModel.updateQuestion(s) },
                     chatEnabled = canUseChat,
-                    sendButtonEnabled = question.trim().isNotBlank() && isIdle
+                    sendButtonEnabled = question.trim().isNotBlank() && isIdle,
+                    onExpandClick = { isFullScreenInputOpen = true }
                 ) {
                     chatViewModel.askQuestion()
                     focusManager.clearFocus()
                 }
             }
+        }
+
+        if (isFullScreenInputOpen) {
+            FullScreenInputDialog(
+                value = question,
+                onValueChange = { s -> chatViewModel.updateQuestion(s) },
+                onDismissRequest = { isFullScreenInputOpen = false },
+                onSendClick = {
+                    chatViewModel.askQuestion()
+                    focusManager.clearFocus()
+                },
+                chatEnabled = canUseChat && isIdle
+            )
         }
 
         if (isChatTitleDialogOpen) {
@@ -701,11 +715,9 @@ fun ChatInputBox(
     onValueChange: (String) -> Unit = {},
     chatEnabled: Boolean = true,
     sendButtonEnabled: Boolean = true,
+    onExpandClick: () -> Unit = {},
     onSendButtonClick: (String) -> Unit = {}
 ) {
-    val localStyle = LocalTextStyle.current
-    val mergedStyle = localStyle.merge(TextStyle(color = LocalContentColor.current))
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -713,37 +725,40 @@ fun ChatInputBox(
             .windowInsetsPadding(BottomAppBarDefaults.windowInsets)
             .padding(BottomAppBarDefaults.ContentPadding)
     ) {
-        BasicTextField(
+        TextField(
             modifier = Modifier
+                .fillMaxWidth()
                 .heightIn(max = 120.dp),
             value = value,
-            enabled = chatEnabled,
-            textStyle = mergedStyle,
-            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             onValueChange = { if (chatEnabled) onValueChange(it) },
-            decorationBox = { innerTextField ->
-                Row(
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .fillMaxWidth()
-                        .height(IntrinsicSize.Min)
-                        .background(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(size = 24.dp))
-                        .padding(all = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .align(Alignment.CenterVertically)
-                            .padding(start = 16.dp)
+            enabled = chatEnabled,
+            singleLine = false,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+            placeholder = {
+                Text(
+                    text = if (chatEnabled) {
+                        stringResource(R.string.ask_a_question)
+                    } else {
+                        stringResource(R.string.some_platforms_disabled)
+                    }
+                )
+            },
+            shape = RoundedCornerShape(24.dp),
+            colors = TextFieldDefaults.colors(
+                focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+            ),
+            trailingIcon = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        enabled = chatEnabled,
+                        onClick = onExpandClick
                     ) {
-                        if (value.isEmpty()) {
-                            Text(
-                                modifier = Modifier.alpha(0.38f),
-                                text = if (chatEnabled) stringResource(R.string.ask_a_question) else stringResource(R.string.some_platforms_disabled)
-                            )
-                        }
-                        innerTextField()
+                        Icon(imageVector = Icons.Rounded.OpenInFull, contentDescription = stringResource(R.string.expand_input))
                     }
                     IconButton(
                         enabled = chatEnabled && sendButtonEnabled,
@@ -754,6 +769,74 @@ fun ChatInputBox(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FullScreenInputDialog(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onDismissRequest: () -> Unit,
+    onSendClick: (String) -> Unit,
+    chatEnabled: Boolean
+) {
+    Dialog(
+        onDismissRequest = onDismissRequest,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = { Text(stringResource(R.string.edit_question)) },
+                    navigationIcon = {
+                        IconButton(onClick = onDismissRequest) {
+                            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.close))
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            enabled = chatEnabled && value.trim().isNotBlank(),
+                            onClick = {
+                                onSendClick(value)
+                                onDismissRequest()
+                            }
+                        ) {
+                            Icon(
+                                imageVector = ImageVector.vectorResource(id = R.drawable.ic_send),
+                                contentDescription = stringResource(R.string.send)
+                            )
+                        }
+                    }
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(16.dp)
+                ) {
+                    TextField(
+                        modifier = Modifier.fillMaxSize(),
+                        value = value,
+                        onValueChange = onValueChange,
+                        enabled = chatEnabled,
+                        singleLine = false,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                        placeholder = { Text(text = stringResource(R.string.ask_a_question)) },
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                            disabledContainerColor = MaterialTheme.colorScheme.surface,
+                            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                            disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+                        )
+                    )
+                }
+            }
+        }
     }
 }
 
