@@ -233,9 +233,11 @@ class ChatViewModel @Inject constructor(
 
     private fun fetchAvailableModels() {
         viewModelScope.launch {
+            val platforms = settingRepository.fetchPlatforms()
             val models = mutableMapOf<ApiType, List<String>>()
             enabledPlatformsInChat.forEach { apiType ->
-                models[apiType] = chatRepository.fetchModels(apiType)
+                val platform = platforms.firstOrNull { it.name == apiType }
+                models[apiType] = chatRepository.fetchModels(apiType, platform)
             }
             _availableModels.update { models }
         }

@@ -44,10 +44,22 @@ class SettingViewModel @Inject constructor(
 
     private fun fetchAvailableModels(apiType: ApiType) {
         viewModelScope.launch {
+            val platforms = if (_platformState.value.isEmpty()) {
+                settingRepository.fetchPlatforms().also { loadedPlatforms ->
+                    _platformState.update { loadedPlatforms }
+                }
+            } else {
+                _platformState.value
+            }
+            val platform = platforms.firstOrNull { it.name == apiType }
+
             _isFetchingModels.value = true
             _fetchedModels.value = emptyList()
-            val models = chatRepository.fetchModels(apiType)
-            _fetchedModels.value = models
+            _fetchedModels.value = if (platform == null) {
+                emptyList()
+            } else {
+                chatRepository.fetchModels(apiType, platform)
+            }
             _isFetchingModels.value = false
         }
     }
