@@ -40,8 +40,10 @@ jobs:
       - name: Generate Signing Key
         env:
           KEYSTORE_B64: ${{ secrets.APP_KEYSTORE }}
+          SIGNING_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          echo $KEYSTORE_B64 | base64 -d > keystore.jks
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > keystore.jks
+          keytool -list -keystore keystore.jks -storetype JKS -storepass "$SIGNING_PASSWORD" >/dev/null
           cp keystore.jks ${{ github.workspace }}/app/build/outputs/bundle/release/keystore.jks
         working-directory: ${{ github.workspace }}/app/build/outputs/apk/release
 
@@ -49,7 +51,7 @@ jobs:
         env:
           SIGNING_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          apksigner sign --ks keystore.jks --alignment-preserved true --ks-pass env:SIGNING_PASSWORD --out app-release.apk app-release-unsigned.apk
+          apksigner sign --ks keystore.jks --ks-type JKS --alignment-preserved true --ks-pass env:SIGNING_PASSWORD --out app-release.apk app-release-unsigned.apk
         working-directory: ${{ github.workspace }}/app/build/outputs/apk/release
 
       - name: Sign Release App Bundle
@@ -57,7 +59,7 @@ jobs:
           SIGNING_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           SIGNING_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -keystore keystore.jks -keypass $SIGNING_PASSWORD -storepass $SIGNING_PASSWORD app-release.aab $SIGNING_KEY_ALIAS
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 -storetype JKS -keystore keystore.jks -keypass $SIGNING_PASSWORD -storepass $SIGNING_PASSWORD app-release.aab $SIGNING_KEY_ALIAS
         working-directory: ${{ github.workspace }}/app/build/outputs/bundle/release
 
       - name: Create Job Summary
