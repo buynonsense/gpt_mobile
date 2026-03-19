@@ -287,8 +287,9 @@ class ChatViewModel @Inject constructor(
             // Get previous answers from the assistant
             val previousAnswers = enabledPlatformsInChat.mapNotNull { apiType -> _messages.value.lastOrNull { it.platformType == apiType } }
 
-            // Remove latest question & answers
-            _messages.update { it - setOf(_messages.value[latestQuestionIndex]) - previousAnswers.toSet() }
+            _messages.update { currentMessages ->
+                currentMessages - previousAnswers.toSet()
+            }
 
             // Restore messages that are not retrying
             enabledPlatformsInChat.forEach { apiType ->

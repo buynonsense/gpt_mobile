@@ -165,6 +165,19 @@ fun ChatScreen(
     val canUseChat = (chatViewModel.enabledPlatformsInChat.toSet() - appEnabledPlatforms.toSet()).isEmpty()
     val groupedMessages = remember(messages) { groupMessages(messages) }
     val latestMessageIndex = groupedMessages.keys.maxOrNull() ?: 0
+    val shouldShowActiveRetryAssistantGroup = remember(messages, groupedMessages, userMessage, isIdle) {
+        if (isIdle || userMessage.content.isBlank()) {
+            false
+        } else {
+            val currentUserGroupKey = groupedMessages.entries
+                .firstOrNull { (_, group) -> group.firstOrNull()?.id == userMessage.id }
+                ?.key
+            val hasAssistantGroupForCurrentUser = currentUserGroupKey
+                ?.let { groupedMessages[it + 1]?.isNotEmpty() == true }
+                ?: false
+            !hasAssistantGroupForCurrentUser
+        }
+    }
     val canEnableAICoreMode = rememberSaveable { checkAICoreAvailability(aiCorePackageInfo, privateComputePackageInfo) }
     val context = LocalContext.current
     
@@ -291,9 +304,20 @@ fun ChatScreen(
                             // Check if this group corresponds to the message currently being regenerated
                             val groupUserMsg = groupedMessages[key - 1]?.firstOrNull()
                             val isRegeneratingThis = !isIdle && groupUserMsg != null && groupUserMsg.id == userMessage.id && userMessage.id != 0
+                            val activeRetryPlatforms = if (isRegeneratingThis) {
+                                buildList {
+                                    if (openaiLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.OPENAI)
+                                    if (anthropicLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.ANTHROPIC)
+                                    if (googleLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.GOOGLE)
+                                    if (groqLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.GROQ)
+                                    if (ollamaLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.OLLAMA)
+                                }
+                            } else {
+                                emptyList()
+                            }
 
                             val activeAssistantMessages = if (isRegeneratingThis) {
-                                chatViewModel.enabledPlatformsInChat.sorted().map { apiType ->
+                                activeRetryPlatforms.map { apiType ->
                                     val msg = when (apiType) {
                                         ApiType.OPENAI -> openAIMessage
                                         ApiType.ANTHROPIC -> anthropicMessage
@@ -301,7 +325,7 @@ fun ChatScreen(
                                         ApiType.GROQ -> groqMessage
                                         ApiType.OLLAMA -> ollamaMessage
                                     }
-                                    msg.copy(platformType = apiType) // Ensure platformType is set
+                                    msg.copy(platformType = apiType)
                                 }
                             } else {
                                 emptyList()
@@ -382,27 +406,21 @@ fun ChatScreen(
                     }
                 }
 
-                if (!isIdle && userMessage.id == 0) {
+                if (shouldShowActiveRetryAssistantGroup) {
                     item {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                        ) {
-                            Spacer(modifier = Modifier.weight(1f))
-                            UserChatBubble(
-                                modifier = Modifier.widthIn(max = maximumChatBubbleWidth),
-                                text = userMessage.content,
-                                isLoading = true,
-                                onCopyClick = { clipboardManager.setText(AnnotatedString(userMessage.content.trim())) },
-                                onEditClick = { chatViewModel.openEditQuestionDialog(userMessage) }
-                            )
+                        val activeRetryPlatforms = buildList {
+                            if (openaiLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.OPENAI)
+                            if (anthropicLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.ANTHROPIC)
+                            if (googleLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.GOOGLE)
+                            if (groqLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.GROQ)
+                            if (ollamaLoadingState == ChatViewModel.LoadingState.Loading) add(ApiType.OLLAMA)
                         }
-                    }
-
-                    item {
-                        val enabledPlatforms = chatViewModel.enabledPlatformsInChat.sorted()
-                        val pagerState = rememberPagerState(pageCount = { enabledPlatforms.size })
+                        val visiblePlatforms = if (activeRetryPlatforms.isNotEmpty()) {
+                            activeRetryPlatforms
+                        } else {
+                            chatViewModel.enabledPlatformsInChat.sorted()
+                        }
+                        val pagerState = rememberPagerState(pageCount = { visiblePlatforms.size })
                         
                         Column {
                             HorizontalPager(
@@ -410,7 +428,7 @@ fun ChatScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 verticalAlignment = Alignment.Top
                             ) { page ->
-                                val apiType = enabledPlatforms[page]
+                                val apiType = visiblePlatforms[page]
                                 
                                 val message = when (apiType) {
                                     ApiType.OPENAI -> openAIMessage
@@ -440,7 +458,7 @@ fun ChatScreen(
                                     modifier = Modifier
                                         .padding(horizontal = 16.dp, vertical = 12.dp)
                                         .width(maximumChatBubbleWidth),
-                                    canRetry = canUseChat,
+                                    canRetry = canUseChat && loadingState != ChatViewModel.LoadingState.Loading,
                                     isLoading = loadingState == ChatViewModel.LoadingState.Loading,
                                     apiType = apiType,
                                     text = message.content,
@@ -454,9 +472,9 @@ fun ChatScreen(
                                     onModelSelected = { model -> chatViewModel.regenerateMessage(message, model) }
                                 )
                             }
-                            if (enabledPlatforms.size > 1) {
+                            if (visiblePlatforms.size > 1) {
                                 Text(
-                                    text = "${pagerState.currentPage + 1} / ${enabledPlatforms.size}",
+                                    text = "${pagerState.currentPage + 1} / ${visiblePlatforms.size}",
                                     modifier = Modifier
                                         .align(Alignment.CenterHorizontally)
                                         .padding(bottom = 8.dp),
