@@ -42,7 +42,14 @@ jobs:
           KEYSTORE_B64: ${{ secrets.APP_KEYSTORE }}
           SIGNING_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > keystore.jks
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          keystore_b64 = os.environ["KEYSTORE_B64"]
+          Path("keystore.jks").write_bytes(base64.b64decode(keystore_b64))
+          PY
           keytool -list -keystore keystore.jks -storetype JKS -storepass "$SIGNING_PASSWORD" >/dev/null
           cp keystore.jks ${{ github.workspace }}/app/build/outputs/bundle/release/keystore.jks
         working-directory: ${{ github.workspace }}/app/build/outputs/apk/release
