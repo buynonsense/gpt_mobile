@@ -4,7 +4,7 @@
 
 # GPT Mobile
 
-### Chat Assistant for Android that supports chatting with multiple models at once.
+### Android 上支持多模型并行聊天的角色化 AI 助手。
 
 <p>
   <a href="https://mailchi.mp/kotlinweekly/kotlin-weekly-431"><img alt="Kotlin Weekly" src="https://img.shields.io/badge/Kotlin%20Weekly-%23431-blue"/></a>
@@ -36,6 +36,19 @@
 
 ## Features
 
+- **角色首页**
+  - 首页以角色卡片而不是历史会话作为主入口
+  - 角色支持简单文本分组，首页按分组以 3 列布局展示
+  - 内置默认角色 `AI助手`，用于无 system prompt 的通用聊天
+  - 点击角色会直接进入该角色最近一次聊天；如果还没有历史记录，会自动创建新会话
+- **角色管理、归档与恢复**
+  - 原有 `AiMask` 能力已升级为角色能力
+  - 角色可编辑名称、分组与 system prompt
+  - 主列表中的删除语义统一为归档
+  - 归档页支持恢复角色，或连同其历史会话一起永久删除
+- **全局消息搜索**
+  - 支持按消息内容模糊搜索全部历史上下文
+  - 搜索结果可直接跳回对应聊天
 - **Chat with multiple models at once**
   - Uses official APIs for each platforms
   - Supported platforms:
@@ -53,6 +66,13 @@
   - Supports dark mode, system dynamic theming **without Activity restart**
 - Per app language setting for Android 13+
 - 100% Kotlin, Jetpack Compose, Single Activity, [Modern App Architecture](https://developer.android.com/topic/architecture#modern-app-architecture) in Android developers documentation
+
+## Current app flow
+
+1. 在首页选择一个角色
+2. 进入该角色最近一次聊天，或自动创建新聊天
+3. 通过顶部搜索入口检索历史消息
+4. 通过角色管理页维护角色、归档和恢复
 
 
 ## To be supported

@@ -1,26 +1,31 @@
 # TODO
 
 ## 当前任务
-- 角色页重构（`feat/role-home-redesign`）
+- 当前无进行中的重构任务
 
-## 待做
-- [ ] 数据库 `AiMask` 增加 `groupName`、`isDefault`、`isArchived`
-- [ ] 数据库 `ChatRoom` 增加 `isArchived`
-- [ ] 新增 `MIGRATION_3_4`，自动创建默认角色 `AI助手`
-- [ ] 扩展 `AiMaskDao` 支持默认角色、分组、归档查询与归档更新
-- [ ] 扩展 `ChatRoomDao` 支持按角色查询最近会话、归档会话
-- [ ] 扩展 `MessageDao` 支持历史消息模糊搜索
-- [ ] 升级 `AiMaskRepository` 为角色能力（创建、归档、恢复、默认角色）
-- [ ] 升级 `ChatRepository` 支持按角色打开最近会话或自动创建新会话
-- [ ] 重构 `HomeViewModel`，从“会话列表状态”改成“角色列表状态”
-- [ ] 重构 `HomeScreen` 为分组 3 列角色页
-- [ ] 移除首页“新建会话”逻辑，改为“点击角色自动进入最近会话”
-- [ ] 改造 `AiMaskListScreen` 为角色管理页，删除语义改为归档
-- [ ] 改造 `AiMaskListViewModel`，删除动作改为归档动作
-- [ ] 新增全局搜索页并接入首页搜索入口
-- [ ] 新增归档页，支持恢复与永久删除
-- [ ] 更新字符串资源，将“删除面具”改为“归档角色”等新语义
-- [ ] 完成后运行数据库迁移验证、编译验证与关键导航验证
+## 最近完成
+- [x] 数据库 `AiMask` 增加 `groupName`、`isDefault`、`isArchived`
+- [x] 数据库 `ChatRoom` 增加 `isArchived`
+- [x] 新增 `MIGRATION_3_4`，自动创建默认角色 `AI助手`
+- [x] 扩展 `AiMaskDao` 支持默认角色、分组、归档查询与归档更新
+- [x] 扩展 `ChatRoomDao` 支持按角色查询最近会话、归档会话
+- [x] 扩展 `MessageDao` 支持历史消息模糊搜索
+- [x] 升级 `AiMaskRepository` 为角色能力（创建、归档、恢复、默认角色）
+- [x] 升级 `ChatRepository` 支持按角色打开最近会话或自动创建新会话
+- [x] 重构 `HomeViewModel`，从“会话列表状态”改成“角色列表状态”
+- [x] 重构 `HomeScreen` 为分组 3 列角色页
+- [x] 移除首页“新建会话”逻辑，改为“点击角色自动进入最近会话”
+- [x] 改造 `AiMaskListScreen` 为角色管理页，删除语义改为归档
+- [x] 改造 `AiMaskListViewModel`，删除动作改为归档动作
+- [x] 新增全局搜索页并接入首页搜索入口
+- [x] 新增归档页，支持恢复与永久删除
+- [x] 更新字符串资源，将“删除面具”改为“归档角色”等新语义
+- [x] 完成数据库迁移验证、编译验证与关键导航验证
+
+## 后续可选项
+- [ ] 补角色页/搜索页/归档页的截图与 README 资源
+- [ ] 增加数据库迁移的自动化测试
+- [ ] 优化消息搜索排序、高亮与结果定位能力
 
 ## 设计决定
 - [x] 首页主对象改成角色，不再是会话
