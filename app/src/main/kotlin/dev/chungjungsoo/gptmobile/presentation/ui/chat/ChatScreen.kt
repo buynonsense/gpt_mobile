@@ -165,12 +165,15 @@ fun ChatScreen(
     val canUseChat = (chatViewModel.enabledPlatformsInChat.toSet() - appEnabledPlatforms.toSet()).isEmpty()
     val groupedMessages = remember(messages) { groupMessages(messages) }
     val latestMessageIndex = groupedMessages.keys.maxOrNull() ?: 0
+    val shouldShowActiveUserBubble = remember(groupedMessages, userMessage, isIdle) {
+        !isIdle && userMessage.content.isNotBlank() && !hasGroupedUserMessage(groupedMessages, userMessage)
+    }
     val shouldShowActiveRetryAssistantGroup = remember(messages, groupedMessages, userMessage, isIdle) {
         if (isIdle || userMessage.content.isBlank()) {
             false
         } else {
             val currentUserGroupKey = groupedMessages.entries
-                .firstOrNull { (_, group) -> group.firstOrNull()?.id == userMessage.id }
+                .firstOrNull { (_, group) -> isSameUserMessage(group.firstOrNull(), userMessage) }
                 ?.key
             val hasAssistantGroupForCurrentUser = currentUserGroupKey
                 ?.let { groupedMessages[it + 1]?.isNotEmpty() == true }
@@ -406,6 +409,25 @@ fun ChatScreen(
                     }
                 }
 
+                if (shouldShowActiveUserBubble) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                        ) {
+                            Spacer(modifier = Modifier.weight(1f))
+                            UserChatBubble(
+                                modifier = Modifier.widthIn(max = maximumChatBubbleWidth),
+                                text = userMessage.content,
+                                isLoading = !isIdle,
+                                onCopyClick = { clipboardManager.setText(AnnotatedString(userMessage.content.trim())) },
+                                onEditClick = {}
+                            )
+                        }
+                    }
+                }
+
                 if (shouldShowActiveRetryAssistantGroup) {
                     item {
                         val activeRetryPlatforms = buildList {
@@ -421,7 +443,7 @@ fun ChatScreen(
                             chatViewModel.enabledPlatformsInChat.sorted()
                         }
                         val pagerState = rememberPagerState(pageCount = { visiblePlatforms.size })
-                        
+
                         Column {
                             HorizontalPager(
                                 state = pagerState,
@@ -429,7 +451,7 @@ fun ChatScreen(
                                 verticalAlignment = Alignment.Top
                             ) { page ->
                                 val apiType = visiblePlatforms[page]
-                                
+
                                 val message = when (apiType) {
                                     ApiType.OPENAI -> openAIMessage
                                     ApiType.ANTHROPIC -> anthropicMessage
@@ -602,7 +624,7 @@ private fun groupMessages(messages: List<Message>): Map<Int, List<Message>> {
     userMessages.forEachIndexed { index, userMsg ->
         val groupIndex = index * 2
         result[groupIndex] = mutableListOf(userMsg)
-        
+
         // Find assistant messages linked to this user message
         val linkedAnswers = if (userMsg.id > 0) {
             assistantMessages.filter { it.linkedMessageId == userMsg.id }
@@ -611,7 +633,7 @@ private fun groupMessages(messages: List<Message>): Map<Int, List<Message>> {
             // For now, assume assistant messages following this user message in the original list are linked
             emptyList()
         }
-        
+
         // Fallback for older messages without linkedMessageId
         val answers = if (linkedAnswers.isEmpty()) {
             val nextUserMsgCreatedAt = userMessages.getOrNull(index + 1)?.createdAt ?: Long.MAX_VALUE
@@ -624,8 +646,24 @@ private fun groupMessages(messages: List<Message>): Map<Int, List<Message>> {
             result[groupIndex + 1] = answers.sortedBy { it.createdAt }.toMutableList()
         }
     }
-    
+
     return result
+}
+
+private fun hasGroupedUserMessage(groupedMessages: Map<Int, List<Message>>, userMessage: Message): Boolean {
+    return groupedMessages
+        .filterKeys { it % 2 == 0 }
+        .values
+        .mapNotNull { it.firstOrNull() }
+        .any { groupedUserMessage -> isSameUserMessage(groupedUserMessage, userMessage) }
+}
+
+private fun isSameUserMessage(message: Message?, target: Message): Boolean {
+    if (message == null) return false
+    if (target.id > 0) {
+        return message.id == target.id
+    }
+    return message.content == target.content && message.createdAt == target.createdAt
 }
 
 @Composable
