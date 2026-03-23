@@ -5,17 +5,20 @@ import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 
+import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
+
 interface SettingDataSource {
     suspend fun updateDynamicTheme(theme: DynamicTheme)
     suspend fun updateThemeMode(themeMode: ThemeMode)
     suspend fun updateStreamingStyle(style: StreamingStyle)
     suspend fun updateStatus(apiType: ApiType, status: Boolean)
     suspend fun updateAPIUrl(apiType: ApiType, url: String)
-    suspend fun updateToken(apiType: ApiType, token: String)
-    suspend fun updateModel(apiType: ApiType, model: String)
-    suspend fun updateTemperature(apiType: ApiType, temperature: Float)
-    suspend fun updateTopP(apiType: ApiType, topP: Float)
-    suspend fun updateSystemPrompt(apiType: ApiType, prompt: String)
+    suspend fun updateToken(apiType: ApiType, token: String?)
+    suspend fun updateModel(apiType: ApiType, model: String?)
+    suspend fun updateTemperature(apiType: ApiType, temperature: Float?)
+    suspend fun updateTopP(apiType: ApiType, topP: Float?)
+    suspend fun updateSystemPrompt(apiType: ApiType, prompt: String?)
+    suspend fun updateWebDavConfig(config: WebDavConfig?)
     suspend fun getDynamicTheme(): DynamicTheme?
     suspend fun getThemeMode(): ThemeMode?
     suspend fun getStreamingStyle(): StreamingStyle?
@@ -26,4 +29,5 @@ interface SettingDataSource {
     suspend fun getTemperature(apiType: ApiType): Float?
     suspend fun getTopP(apiType: ApiType): Float?
     suspend fun getSystemPrompt(apiType: ApiType): String?
+    suspend fun getWebDavConfig(): WebDavConfig?
 }

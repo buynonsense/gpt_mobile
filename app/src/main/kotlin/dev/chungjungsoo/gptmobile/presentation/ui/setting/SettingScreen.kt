@@ -53,6 +53,7 @@ fun SettingScreen(
     settingViewModel: SettingViewModel = hiltViewModel(),
     onNavigationClick: () -> Unit,
     onNavigateToPlatformSetting: (ApiType) -> Unit,
+    onNavigateToSyncPage: () -> Unit,
     onNavigateToAboutPage: () -> Unit
 ) {
     val scrollState = rememberScrollState()
@@ -87,6 +88,7 @@ fun SettingScreen(
                     showLeadingIcon = false
                 )
             }
+            DataSyncItem(onItemClick = onNavigateToSyncPage)
             AboutPageItem(onItemClick = onNavigateToAboutPage)
 
             if (dialogState.isThemeDialogOpen) {
@@ -98,6 +100,19 @@ fun SettingScreen(
             }
         }
     }
+}
+
+@Composable
+fun DataSyncItem(
+    onItemClick: () -> Unit
+) {
+    SettingItem(
+        title = stringResource(R.string.data_sync),
+        description = stringResource(R.string.data_sync_description),
+        onItemClick = onItemClick,
+        showTrailingIcon = true,
+        showLeadingIcon = false
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

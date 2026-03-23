@@ -3,6 +3,7 @@ package dev.chungjungsoo.gptmobile.data.database.dao
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
@@ -18,6 +19,9 @@ interface ChatRoomDao {
 
     @Query("SELECT * FROM chats WHERE is_archived = 1 ORDER BY created_at DESC")
     suspend fun getArchivedChatRooms(): List<ChatRoom>
+
+    @Query("SELECT * FROM chats ORDER BY chat_id ASC")
+    suspend fun getAll(): List<ChatRoom>
 
     @Query("SELECT * FROM chats WHERE is_archived = 0 AND mask_id = :maskId ORDER BY created_at DESC LIMIT 1")
     suspend fun getLatestActiveChatByMaskId(maskId: Int): ChatRoom?
@@ -43,12 +47,18 @@ interface ChatRoomDao {
     @Query("DELETE FROM chats WHERE mask_id = :maskId")
     suspend fun deleteByMaskId(maskId: Int)
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addChatRoom(chatRoom: ChatRoom): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(chatRooms: List<ChatRoom>)
 
     @Update
     suspend fun editChatRoom(chatRoom: ChatRoom)
 
     @Delete
     suspend fun deleteChatRooms(vararg chatRooms: ChatRoom)
+
+    @Query("DELETE FROM chats")
+    suspend fun deleteAll()
 }

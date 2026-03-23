@@ -16,6 +16,9 @@ interface AiMaskDao {
     @Query("SELECT * FROM ai_masks WHERE is_archived = 1 ORDER BY updated_at DESC")
     suspend fun getArchived(): List<AiMask>
 
+    @Query("SELECT * FROM ai_masks ORDER BY mask_id ASC")
+    suspend fun getAllIncludingArchived(): List<AiMask>
+
     @Query("SELECT * FROM ai_masks WHERE mask_id = :id LIMIT 1")
     suspend fun getById(id: Int): AiMask?
 
@@ -34,6 +37,9 @@ interface AiMaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(mask: AiMask): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(masks: List<AiMask>)
+
     @Update
     suspend fun update(mask: AiMask)
 
@@ -45,6 +51,9 @@ interface AiMaskDao {
 
     @Query("DELETE FROM ai_masks WHERE mask_id = :id")
     suspend fun deleteById(id: Int)
+
+    @Query("DELETE FROM ai_masks")
+    suspend fun deleteAll()
 
     @Query("UPDATE ai_masks SET last_used_at = :timestamp WHERE mask_id = :id")
     suspend fun touch(id: Int, timestamp: Long)

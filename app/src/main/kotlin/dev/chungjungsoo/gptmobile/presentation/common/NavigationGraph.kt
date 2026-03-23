@@ -25,6 +25,7 @@ import dev.chungjungsoo.gptmobile.presentation.ui.setting.LicenseScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.PlatformSettingScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.SettingScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setting.SettingViewModel
+import dev.chungjungsoo.gptmobile.presentation.ui.setting.SyncScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setup.SelectModelScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setup.SelectPlatformScreen
 import dev.chungjungsoo.gptmobile.presentation.ui.setup.SetupAPIUrlScreen
@@ -265,6 +266,7 @@ fun NavGraphBuilder.settingNavigation(navController: NavHostController) {
                         ApiType.OLLAMA -> navController.navigate(Route.OLLAMA_SETTINGS)
                     }
                 },
+                onNavigateToSyncPage = { navController.navigate(Route.SYNC_SETTINGS) },
                 onNavigateToAboutPage = { navController.navigate(Route.ABOUT_PAGE) }
             )
         }
@@ -317,6 +319,9 @@ fun NavGraphBuilder.settingNavigation(navController: NavHostController) {
                 settingViewModel = settingViewModel,
                 apiType = ApiType.OLLAMA
             ) { navController.navigateUp() }
+        }
+        composable(Route.SYNC_SETTINGS) {
+            SyncScreen(onNavigationClick = { navController.navigateUp() })
         }
         composable(Route.ABOUT_PAGE) {
             AboutScreen(

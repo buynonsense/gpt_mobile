@@ -11,9 +11,11 @@ import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
+import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
 
 class SettingDataSourceImpl @Inject constructor(
     private val dataStore: DataStore<Preferences>
@@ -70,6 +72,7 @@ class SettingDataSourceImpl @Inject constructor(
     private val dynamicThemeKey = intPreferencesKey("dynamic_mode")
     private val themeModeKey = intPreferencesKey("theme_mode")
     private val streamingStyleKey = intPreferencesKey("streaming_style")
+    private val webDavConfigKey = stringPreferencesKey("webdav_config")
 
     override suspend fun updateDynamicTheme(theme: DynamicTheme) {
         dataStore.edit { pref ->
@@ -101,33 +104,68 @@ class SettingDataSourceImpl @Inject constructor(
         }
     }
 
-    override suspend fun updateToken(apiType: ApiType, token: String) {
+    override suspend fun updateToken(apiType: ApiType, token: String?) {
         dataStore.edit { pref ->
-            pref[apiTokenMap[apiType]!!] = token
+            val key = apiTokenMap[apiType]!!
+            if (token.isNullOrBlank()) {
+                pref.remove(key)
+            } else {
+                pref[key] = token
+            }
         }
     }
 
-    override suspend fun updateModel(apiType: ApiType, model: String) {
+    override suspend fun updateModel(apiType: ApiType, model: String?) {
         dataStore.edit { pref ->
-            pref[apiModelMap[apiType]!!] = model
+            val key = apiModelMap[apiType]!!
+            if (model.isNullOrBlank()) {
+                pref.remove(key)
+            } else {
+                pref[key] = model
+            }
         }
     }
 
-    override suspend fun updateTemperature(apiType: ApiType, temperature: Float) {
+    override suspend fun updateTemperature(apiType: ApiType, temperature: Float?) {
         dataStore.edit { pref ->
-            pref[apiTemperatureMap[apiType]!!] = temperature
+            val key = apiTemperatureMap[apiType]!!
+            if (temperature == null) {
+                pref.remove(key)
+            } else {
+                pref[key] = temperature
+            }
         }
     }
 
-    override suspend fun updateTopP(apiType: ApiType, topP: Float) {
+    override suspend fun updateTopP(apiType: ApiType, topP: Float?) {
         dataStore.edit { pref ->
-            pref[apiTopPMap[apiType]!!] = topP
+            val key = apiTopPMap[apiType]!!
+            if (topP == null) {
+                pref.remove(key)
+            } else {
+                pref[key] = topP
+            }
         }
     }
 
-    override suspend fun updateSystemPrompt(apiType: ApiType, prompt: String) {
+    override suspend fun updateSystemPrompt(apiType: ApiType, prompt: String?) {
         dataStore.edit { pref ->
-            pref[apiSystemPromptMap[apiType]!!] = prompt
+            val key = apiSystemPromptMap[apiType]!!
+            if (prompt.isNullOrBlank()) {
+                pref.remove(key)
+            } else {
+                pref[key] = prompt
+            }
+        }
+    }
+
+    override suspend fun updateWebDavConfig(config: WebDavConfig?) {
+        dataStore.edit { pref ->
+            if (config == null) {
+                pref.remove(webDavConfigKey)
+            } else {
+                pref[webDavConfigKey] = json.encodeToString(WebDavConfig.serializer(), config)
+            }
         }
     }
 
@@ -182,4 +220,10 @@ class SettingDataSourceImpl @Inject constructor(
     override suspend fun getSystemPrompt(apiType: ApiType): String? = dataStore.data.map { pref ->
         pref[apiSystemPromptMap[apiType]!!]
     }.first()
+
+    override suspend fun getWebDavConfig(): WebDavConfig? = dataStore.data.map { pref ->
+        pref[webDavConfigKey]
+    }.first()?.let { json.decodeFromString(WebDavConfig.serializer(), it) }
+
+    private val json = Json { ignoreUnknownKeys = true }
 }

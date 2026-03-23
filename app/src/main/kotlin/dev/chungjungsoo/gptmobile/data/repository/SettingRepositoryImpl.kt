@@ -8,6 +8,7 @@ import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
+import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import javax.inject.Inject
 
 class SettingRepositoryImpl @Inject constructor(
@@ -55,16 +56,17 @@ class SettingRepositoryImpl @Inject constructor(
     override suspend fun fetchStreamingStyle(): StreamingStyle =
         settingDataSource.getStreamingStyle() ?: StreamingStyle.TYPEWRITER
 
+    override suspend fun fetchWebDavConfig(): WebDavConfig? = settingDataSource.getWebDavConfig()
+
     override suspend fun updatePlatforms(platforms: List<Platform>) {
         platforms.forEach { platform ->
             settingDataSource.updateStatus(platform.name, platform.enabled)
             settingDataSource.updateAPIUrl(platform.name, platform.apiUrl)
-
-            platform.token?.let { settingDataSource.updateToken(platform.name, it) }
-            platform.model?.let { settingDataSource.updateModel(platform.name, it) }
-            platform.temperature?.let { settingDataSource.updateTemperature(platform.name, it) }
-            platform.topP?.let { settingDataSource.updateTopP(platform.name, it) }
-            platform.systemPrompt?.let { settingDataSource.updateSystemPrompt(platform.name, it.trim()) }
+            settingDataSource.updateToken(platform.name, platform.token)
+            settingDataSource.updateModel(platform.name, platform.model)
+            settingDataSource.updateTemperature(platform.name, platform.temperature)
+            settingDataSource.updateTopP(platform.name, platform.topP)
+            settingDataSource.updateSystemPrompt(platform.name, platform.systemPrompt?.trim())
         }
     }
 
@@ -75,5 +77,9 @@ class SettingRepositoryImpl @Inject constructor(
 
     override suspend fun updateStreamingStyle(style: StreamingStyle) {
         settingDataSource.updateStreamingStyle(style)
+    }
+
+    override suspend fun updateWebDavConfig(config: WebDavConfig?) {
+        settingDataSource.updateWebDavConfig(config)
     }
 }
