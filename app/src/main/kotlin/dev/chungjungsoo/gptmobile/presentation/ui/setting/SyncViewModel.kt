@@ -267,6 +267,34 @@ class SyncViewModel @Inject constructor(
         _uiState.update { it.copy(uploadConflict = null) }
     }
 
+    fun resolveConflictByUsingRemoteBackup() {
+        val conflict = _uiState.value.uploadConflict
+        if (conflict == null) {
+            showError(R.string.remote_backup_required)
+            return
+        }
+
+        val password = _uiState.value.webDavPassword
+        if (password.isBlank()) {
+            showError(R.string.webdav_password_required)
+            return
+        }
+
+        launchSafely(action = {
+            val content = syncRepository.downloadRemoteBackup(password, conflict.remoteFileName)
+            val summary = syncRepository.parseBackup(content)
+            showStatus(R.string.conflict_remote_backup_loaded)
+            _uiState.update {
+                it.copy(
+                    importedBackupJson = content,
+                    importedBackupSummary = summary,
+                    selectedRemoteFile = conflict.remoteFileName,
+                    uploadConflict = null
+                )
+            }
+        }, fallbackErrorResId = R.string.backup_download_failed)
+    }
+
     private fun launchSafely(action: suspend () -> Unit, fallbackErrorResId: Int = R.string.unknown_sync_error) {
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, errorMessage = null, statusMessage = null) }

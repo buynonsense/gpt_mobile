@@ -354,8 +354,13 @@ fun SyncScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = syncViewModel::dismissConflict) {
-                    Text(stringResource(R.string.cancel))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = syncViewModel::resolveConflictByUsingRemoteBackup) {
+                        Text(stringResource(R.string.use_remote_backup))
+                    }
+                    TextButton(onClick = syncViewModel::dismissConflict) {
+                        Text(stringResource(R.string.cancel))
+                    }
                 }
             },
             title = { Text(stringResource(R.string.sync_conflict_title)) },

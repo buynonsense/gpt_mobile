@@ -3,6 +3,7 @@ package dev.chungjungsoo.gptmobile.presentation.ui.setting
 import androidx.activity.ComponentActivity
 import androidx.test.core.app.ApplicationProvider
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
@@ -65,7 +66,45 @@ class SyncScreenTest {
         composeRule.onNodeWithTag(SYNC_ERROR_MESSAGE_TAG).performScrollTo().assertIsDisplayed()
     }
 
-    private class FakeSyncRepository : SyncRepository {
+    @Test
+    fun conflictDialog_useRemoteBackup_loadsRemoteBackupIntoRestoreArea() {
+        val viewModel = SyncViewModel(
+            syncRepository = FakeSyncRepository(
+                conflict = SyncConflict(
+                    localSummary = BackupSummary(1, 2, 3, true),
+                    remoteSummary = BackupSummary(4, 5, 6, true),
+                    localExportedAt = 10L,
+                    remoteExportedAt = 20L,
+                    remoteFileName = "remote.json"
+                ),
+                remoteBackupContent = "{\"remote\":true}"
+            ),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        composeRule.setContent {
+            GPTMobileTheme {
+                SyncScreen(
+                    onNavigationClick = {},
+                    syncViewModel = viewModel
+                )
+            }
+        }
+
+        composeRule.runOnIdle {
+            viewModel.updateBackupPassword("backup")
+            viewModel.updateWebDavPassword("dav")
+        }
+
+        composeRule.onNodeWithText("上传到云端").performScrollTo().performClick()
+        composeRule.onNodeWithText("以云端为准").assertIsDisplayed().performClick()
+        composeRule.onNodeWithText("{\"remote\":true}").performScrollTo().assertIsDisplayed()
+    }
+
+    private class FakeSyncRepository(
+        private val conflict: SyncConflict? = null,
+        private val remoteBackupContent: String = ""
+    ) : SyncRepository {
         override suspend fun exportBackupJson(password: String): String = ""
 
         override suspend fun restoreBackupJson(content: String, password: String) = Unit
@@ -104,10 +143,10 @@ class SyncScreenTest {
 
         override suspend fun listRemoteBackups(password: String): List<WebDavRemoteFile> = emptyList()
 
-        override suspend fun detectUploadConflict(password: String): SyncConflict? = null
+        override suspend fun detectUploadConflict(password: String): SyncConflict? = conflict
 
         override suspend fun uploadBackup(password: String, overwrite: Boolean): String = ""
 
-        override suspend fun downloadRemoteBackup(password: String, remoteFileName: String): String = ""
+        override suspend fun downloadRemoteBackup(password: String, remoteFileName: String): String = remoteBackupContent
     }
 }
