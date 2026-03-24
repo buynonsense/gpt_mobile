@@ -1,5 +1,11 @@
 package dev.chungjungsoo.gptmobile.presentation.ui.setting
 
+import android.content.Context
+import android.net.Uri
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
+import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,9 +31,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,6 +45,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.presentation.common.PrimaryLongButton
 
+private const val SYNC_SCREEN_LOG_TAG = "SyncScreen"
+internal const val SAVE_BACKUP_TO_FILE_BUTTON_TAG = "save_backup_to_file_button"
+internal const val IMPORT_BACKUP_FROM_FILE_BUTTON_TAG = "import_backup_from_file_button"
+internal const val SYNC_ERROR_MESSAGE_TAG = "sync_error_message"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SyncScreen(
@@ -45,7 +58,34 @@ fun SyncScreen(
 ) {
     val uiState by syncViewModel.uiState.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
     val backupCopiedMessage = stringResource(R.string.backup_copied)
+    val saveBackupToFileMessage = stringResource(R.string.save_backup_to_file)
+    val backupFileName = stringResource(R.string.backup_file_name)
+    val backupSaveRequiresContentMessage = stringResource(R.string.backup_save_requires_content)
+    val backupSavedMessage = stringResource(R.string.backup_saved_to_file)
+    val backupSaveFailedMessage = stringResource(R.string.backup_save_failed)
+    val importBackupFromFileMessage = stringResource(R.string.import_backup_from_file)
+    val backupImportFailedMessage = stringResource(R.string.backup_import_failed)
+    val saveBackupLauncher = rememberLauncherForActivityResult(CreateDocument("application/json")) { uri ->
+        handleBackupFileCreated(
+            uri = uri,
+            backupContent = uiState.localBackupJson,
+            context = context,
+            syncViewModel = syncViewModel,
+            backupSaveRequiresContentMessage = backupSaveRequiresContentMessage,
+            backupSavedMessage = backupSavedMessage,
+            backupSaveFailedMessage = backupSaveFailedMessage
+        )
+    }
+    val importBackupLauncher = rememberLauncherForActivityResult(OpenDocument()) { uri ->
+        handleBackupFileSelected(
+            uri = uri,
+            context = context,
+            syncViewModel = syncViewModel,
+            backupImportFailedMessage = backupImportFailedMessage
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -106,6 +146,23 @@ fun SyncScreen(
             ) {
                 Text(stringResource(R.string.copy_backup_content))
             }
+            TextButton(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .testTag(SAVE_BACKUP_TO_FILE_BUTTON_TAG),
+                enabled = !uiState.isBusy,
+                onClick = {
+                    launchBackupSave(
+                        backupContent = uiState.localBackupJson,
+                        backupFileName = backupFileName,
+                        backupSaveRequiresContentMessage = backupSaveRequiresContentMessage,
+                        syncViewModel = syncViewModel,
+                        launchCreateDocument = saveBackupLauncher::launch
+                    )
+                }
+            ) {
+                Text(saveBackupToFileMessage)
+            }
             OutlinedTextField(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -127,6 +184,15 @@ fun SyncScreen(
 
             SectionTitle(stringResource(R.string.restore_backup))
             SectionDescription(stringResource(R.string.restore_backup_description))
+            TextButton(
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .testTag(IMPORT_BACKUP_FROM_FILE_BUTTON_TAG),
+                enabled = !uiState.isBusy,
+                onClick = { importBackupLauncher.launch(arrayOf("application/json")) }
+            ) {
+                Text(importBackupFromFileMessage)
+            }
             OutlinedTextField(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -140,6 +206,12 @@ fun SyncScreen(
                 value = uiState.restorePassword,
                 label = stringResource(R.string.restore_password),
                 onValueChange = syncViewModel::updateRestorePassword
+            )
+            Text(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                text = stringResource(R.string.restore_password_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(
                 modifier = Modifier
@@ -229,10 +301,15 @@ fun SyncScreen(
                     stringResource(R.string.no_remote_backups)
                 } else {
                     uiState.remoteBackups.joinToString(separator = "\n") { file ->
-                        buildString {
-                            append(file.name)
-                            file.modifiedAt?.let { append(" · ").append(it) }
-                            file.contentLength?.let { append(" · ").append(it).append(" B") }
+                        val segments = buildList {
+                            add(file.name)
+                            file.modifiedAt?.let { add(it) }
+                            file.contentLength?.let {
+                                add(context.getString(R.string.remote_backup_size_bytes, it))
+                            }
+                        }
+                        segments.reduce { acc, segment ->
+                            context.getString(R.string.remote_backup_list_item, acc, segment)
                         }
                     }
                 }
@@ -242,7 +319,10 @@ fun SyncScreen(
                 BackupSummaryCard(summaryText = message)
             }
             uiState.errorMessage?.let { error ->
-                BackupSummaryCard(summaryText = error)
+                BackupSummaryCard(
+                    summaryText = error,
+                    modifier = Modifier.testTag(SYNC_ERROR_MESSAGE_TAG)
+                )
             }
             TextButton(
                 modifier = Modifier.padding(horizontal = 20.dp),
@@ -293,6 +373,81 @@ fun SyncScreen(
     }
 }
 
+private fun handleBackupFileSelected(
+    uri: Uri?,
+    context: Context,
+    syncViewModel: SyncViewModel,
+    backupImportFailedMessage: String
+) {
+    val content = readBackupFromUri(context, uri)
+    if (content.isNullOrBlank()) {
+        syncViewModel.showError(backupImportFailedMessage)
+        return
+    }
+
+    syncViewModel.updateImportedBackupJson(content)
+    syncViewModel.loadImportedSummary()
+}
+
+private fun launchBackupSave(
+    backupContent: String?,
+    backupFileName: String,
+    backupSaveRequiresContentMessage: String,
+    syncViewModel: SyncViewModel,
+    launchCreateDocument: (String) -> Unit
+) {
+    if (backupContent.isNullOrBlank()) {
+        syncViewModel.showError(backupSaveRequiresContentMessage)
+        return
+    }
+
+    launchCreateDocument(backupFileName)
+}
+
+private fun handleBackupFileCreated(
+    uri: Uri?,
+    backupContent: String?,
+    context: Context,
+    syncViewModel: SyncViewModel,
+    backupSaveRequiresContentMessage: String,
+    backupSavedMessage: String,
+    backupSaveFailedMessage: String
+) {
+    when {
+        uri == null -> Unit
+        backupContent.isNullOrBlank() -> syncViewModel.showError(backupSaveRequiresContentMessage)
+        writeBackupToUri(context, uri, backupContent) -> syncViewModel.showStatus(backupSavedMessage)
+        else -> syncViewModel.showError(backupSaveFailedMessage)
+    }
+}
+
+private fun writeBackupToUri(context: Context, uri: Uri, backupContent: String): Boolean =
+    runCatching {
+        context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+            outputStream.write(backupContent.toByteArray())
+        } ?: error("output stream unavailable")
+    }.fold(
+        onSuccess = { true },
+        onFailure = { error ->
+            Log.e(SYNC_SCREEN_LOG_TAG, "保存备份文件失败: uri=$uri", error)
+            false
+        }
+    )
+
+private fun readBackupFromUri(context: Context, uri: Uri?): String? =
+    runCatching {
+        val targetUri = uri ?: error("uri unavailable")
+        context.contentResolver.openInputStream(targetUri)?.bufferedReader()?.use { reader ->
+            reader.readText()
+        } ?: error("input stream unavailable")
+    }.fold(
+        onSuccess = { it },
+        onFailure = { error ->
+            Log.e(SYNC_SCREEN_LOG_TAG, "读取备份文件失败: uri=$uri", error)
+            null
+        }
+    )
+
 @Composable
 private fun SectionTitle(text: String) {
     Text(
@@ -340,10 +495,10 @@ private fun SimpleField(value: String, label: String, onValueChange: (String) ->
 }
 
 @Composable
-private fun BackupSummaryCard(summaryText: String) {
+private fun BackupSummaryCard(summaryText: String, modifier: Modifier = Modifier) {
     SelectionContainer {
         Text(
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             text = summaryText,

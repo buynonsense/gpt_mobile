@@ -1,8 +1,11 @@
 package dev.chungjungsoo.gptmobile.presentation.ui.setting
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.chungjungsoo.gptmobile.R
 import dev.chungjungsoo.gptmobile.data.sync.SyncRepository
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncConflict
@@ -16,7 +19,8 @@ import kotlinx.coroutines.launch
 
 @HiltViewModel
 class SyncViewModel @Inject constructor(
-    private val syncRepository: SyncRepository
+    private val syncRepository: SyncRepository,
+    @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     data class UiState(
@@ -76,56 +80,57 @@ class SyncViewModel @Inject constructor(
     fun loadImportedSummary() {
         val content = _uiState.value.importedBackupJson.orEmpty()
         if (content.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请先粘贴备份内容") }
+            showError(R.string.backup_content_required_for_import)
             return
         }
 
         launchSafely(action = {
             val summary = syncRepository.parseBackup(content)
-            _uiState.update { it.copy(importedBackupSummary = summary, statusMessage = "已解析备份摘要") }
-        })
+            showStatus(R.string.backup_summary_parsed)
+            _uiState.update { it.copy(importedBackupSummary = summary) }
+        }, fallbackErrorResId = R.string.backup_import_failed)
     }
 
     fun exportBackup() {
         val password = _uiState.value.backupPassword
         if (password.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入备份密码") }
+            showError(R.string.backup_password_required)
             return
         }
 
         launchSafely(action = {
             val content = syncRepository.exportBackupJson(password)
+            showStatus(R.string.backup_generated)
             _uiState.update {
                 it.copy(
-                    localBackupJson = content,
-                    statusMessage = "备份已生成，可复制或保存到文件"
+                    localBackupJson = content
                 )
             }
-        })
+        }, fallbackErrorResId = R.string.backup_export_failed)
     }
 
     fun restoreImportedBackup() {
         val content = _uiState.value.importedBackupJson.orEmpty()
         val password = _uiState.value.restorePassword
         if (content.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请先提供备份内容") }
+            showError(R.string.backup_content_required_for_import)
             return
         }
         if (password.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入恢复密码") }
+            showError(R.string.restore_password_required)
             return
         }
 
         launchSafely(action = {
             syncRepository.restoreBackupJson(content, password)
-            _uiState.update { it.copy(statusMessage = "本地数据已覆盖恢复") }
-        })
+            showStatus(R.string.backup_restored)
+        }, fallbackErrorResId = R.string.backup_restore_failed)
     }
 
     fun saveWebDavConfig() {
         val state = _uiState.value
         if (state.webDavBaseUrl.isBlank() || state.webDavUsername.isBlank() || state.webDavPassword.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请填写完整的 WebDAV 地址、用户名和密码") }
+            showError(R.string.webdav_config_required)
             return
         }
 
@@ -136,14 +141,14 @@ class SyncViewModel @Inject constructor(
                 remotePath = state.webDavRemotePath,
                 password = state.webDavPassword
             )
-            _uiState.update { it.copy(statusMessage = "WebDAV 配置已保存") }
+            showStatus(R.string.webdav_config_saved)
         })
     }
 
     fun testWebDavConnection() {
         val state = _uiState.value
         if (state.webDavBaseUrl.isBlank() || state.webDavUsername.isBlank() || state.webDavPassword.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请填写完整的 WebDAV 地址、用户名和密码") }
+            showError(R.string.webdav_config_required)
             return
         }
 
@@ -154,23 +159,23 @@ class SyncViewModel @Inject constructor(
                 remotePath = state.webDavRemotePath,
                 password = state.webDavPassword
             )
-            _uiState.update { it.copy(statusMessage = "WebDAV 连接成功") }
+            showStatus(R.string.webdav_connection_success)
         })
     }
 
     fun loadRemoteBackups() {
         val password = _uiState.value.webDavPassword
         if (password.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入 WebDAV 密码") }
+            showError(R.string.webdav_password_required)
             return
         }
 
         launchSafely(action = {
             val remoteFiles = syncRepository.listRemoteBackups(password)
+            showStatus(R.string.remote_backups_refreshed)
             _uiState.update {
                 it.copy(
                     remoteBackups = remoteFiles,
-                    statusMessage = "已刷新云端备份列表",
                     selectedRemoteFile = remoteFiles.firstOrNull()?.name.orEmpty()
                 )
             }
@@ -180,11 +185,11 @@ class SyncViewModel @Inject constructor(
     fun uploadBackup(overwrite: Boolean = false) {
         val state = _uiState.value
         if (state.backupPassword.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入备份密码") }
+            showError(R.string.backup_password_required)
             return
         }
         if (state.webDavPassword.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入 WebDAV 密码") }
+            showError(R.string.webdav_password_required)
             return
         }
 
@@ -192,7 +197,8 @@ class SyncViewModel @Inject constructor(
             if (!overwrite) {
                 val conflict = syncRepository.detectUploadConflict(state.webDavPassword)
                 if (conflict != null) {
-                    _uiState.update { it.copy(uploadConflict = conflict, statusMessage = "检测到云端冲突，请手动选择") }
+                    showStatus(R.string.upload_conflict_detected)
+                    _uiState.update { it.copy(uploadConflict = conflict) }
                     return@launchSafely
                 }
             }
@@ -202,12 +208,12 @@ class SyncViewModel @Inject constructor(
                 overwrite = overwrite
             )
             val remoteFiles = syncRepository.listRemoteBackups(state.webDavPassword)
+            showStatus(R.string.backup_uploaded, fileName)
             _uiState.update {
                 it.copy(
                     uploadConflict = null,
                     remoteBackups = remoteFiles,
-                    selectedRemoteFile = fileName,
-                    statusMessage = "已上传到云端：$fileName"
+                    selectedRemoteFile = fileName
                 )
             }
         })
@@ -216,22 +222,22 @@ class SyncViewModel @Inject constructor(
     fun downloadSelectedRemoteBackup() {
         val state = _uiState.value
         if (state.webDavPassword.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请输入 WebDAV 密码") }
+            showError(R.string.webdav_password_required)
             return
         }
         if (state.selectedRemoteFile.isBlank()) {
-            _uiState.update { it.copy(errorMessage = "请先选择云端备份文件") }
+            showError(R.string.remote_backup_required)
             return
         }
 
         launchSafely(action = {
             val content = syncRepository.downloadRemoteBackup(state.webDavPassword, state.selectedRemoteFile)
             val summary = syncRepository.parseBackup(content)
+            showStatus(R.string.backup_downloaded)
             _uiState.update {
                 it.copy(
                     importedBackupJson = content,
-                    importedBackupSummary = summary,
-                    statusMessage = "已下载云端备份，可选择恢复到本地"
+                    importedBackupSummary = summary
                 )
             }
         })
@@ -245,16 +251,28 @@ class SyncViewModel @Inject constructor(
         _uiState.update { it.copy(statusMessage = message, errorMessage = null) }
     }
 
+    fun showStatus(messageResId: Int, vararg formatArgs: Any) {
+        showStatus(appContext.getString(messageResId, *formatArgs))
+    }
+
+    fun showError(message: String) {
+        _uiState.update { it.copy(errorMessage = message, statusMessage = null) }
+    }
+
+    fun showError(messageResId: Int, vararg formatArgs: Any) {
+        showError(appContext.getString(messageResId, *formatArgs))
+    }
+
     fun dismissConflict() {
         _uiState.update { it.copy(uploadConflict = null) }
     }
 
-    private fun launchSafely(action: suspend () -> Unit) {
+    private fun launchSafely(action: suspend () -> Unit, fallbackErrorResId: Int = R.string.unknown_sync_error) {
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, errorMessage = null, statusMessage = null) }
             runCatching { action() }
                 .onFailure { error ->
-                    _uiState.update { it.copy(errorMessage = error.message ?: "发生未知错误") }
+                    showError(error.message ?: appContext.getString(fallbackErrorResId))
                 }
             _uiState.update { it.copy(isBusy = false) }
         }

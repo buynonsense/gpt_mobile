@@ -17,7 +17,7 @@ object WebDavXmlParser {
             for (index in 0 until responseNodes.length) {
                 val response = responseNodes.item(index) as? Element ?: continue
                 val href = response.getElementsByTagNameNS("DAV:", "href").item(0)?.textContent ?: continue
-                val prop = response.getElementsByTagNameNS("DAV:", "prop").item(0) as? Element
+                val prop = response.findSuccessfulProp()
                 val displayName = prop?.getElementsByTagNameNS("DAV:", "displayname")?.item(0)?.textContent
                 val contentLength = prop?.getElementsByTagNameNS("DAV:", "getcontentlength")?.item(0)?.textContent?.toLongOrNull()
                 val modifiedAt = prop?.getElementsByTagNameNS("DAV:", "getlastmodified")?.item(0)?.textContent
@@ -37,5 +37,18 @@ object WebDavXmlParser {
                 )
             }
         }
+    }
+
+    private fun Element.findSuccessfulProp(): Element? {
+        val propstatNodes = getElementsByTagNameNS("DAV:", "propstat")
+        for (index in 0 until propstatNodes.length) {
+            val propstat = propstatNodes.item(index) as? Element ?: continue
+            val status = propstat.getElementsByTagNameNS("DAV:", "status").item(0)?.textContent.orEmpty()
+            if (!status.contains(" 200 ")) {
+                continue
+            }
+            return propstat.getElementsByTagNameNS("DAV:", "prop").item(0) as? Element
+        }
+        return null
     }
 }

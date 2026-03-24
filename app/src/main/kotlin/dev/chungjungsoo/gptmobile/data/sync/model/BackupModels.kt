@@ -63,6 +63,7 @@ data class BackupDatabase(
 @Serializable
 data class BackupPlatform(
     val name: String,
+    val selected: Boolean = false,
     val enabled: Boolean,
     val apiUrl: String,
     val token: String? = null,
@@ -122,6 +123,7 @@ data class BackupAiMask(
 
 fun Platform.toBackupModel(): BackupPlatform = BackupPlatform(
     name = name.name,
+    selected = selected,
     enabled = enabled,
     apiUrl = apiUrl,
     token = token,
@@ -133,6 +135,7 @@ fun Platform.toBackupModel(): BackupPlatform = BackupPlatform(
 
 fun BackupPlatform.toPlatform(): Platform = Platform(
     name = ApiType.valueOf(name),
+    selected = selected,
     enabled = enabled,
     apiUrl = apiUrl,
     token = token,
