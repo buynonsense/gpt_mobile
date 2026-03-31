@@ -1,6 +1,5 @@
 package dev.chungjungsoo.gptmobile.data.sync
 
-import androidx.room.withTransaction
 import dev.chungjungsoo.gptmobile.data.database.ChatDatabase
 import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
@@ -24,14 +23,31 @@ import javax.inject.Singleton
 import kotlinx.serialization.json.Json
 
 @Singleton
-class BackupRepositoryImpl @Inject constructor(
-    private val chatDatabase: ChatDatabase,
+class BackupRepositoryImpl internal constructor(
     private val chatRoomDao: ChatRoomDao,
     private val messageDao: MessageDao,
     private val aiMaskDao: AiMaskDao,
     private val settingRepository: SettingRepository,
-    private val cryptoManager: BackupCryptoManager
+    private val cryptoManager: BackupCryptoManager,
+    private val restoreTransactionRunner: BackupRestoreTransactionRunner
 ) : BackupRepository {
+
+    @Inject
+    constructor(
+        chatDatabase: ChatDatabase,
+        chatRoomDao: ChatRoomDao,
+        messageDao: MessageDao,
+        aiMaskDao: AiMaskDao,
+        settingRepository: SettingRepository,
+        cryptoManager: BackupCryptoManager
+    ) : this(
+        chatRoomDao = chatRoomDao,
+        messageDao = messageDao,
+        aiMaskDao = aiMaskDao,
+        settingRepository = settingRepository,
+        cryptoManager = cryptoManager,
+        restoreTransactionRunner = RoomBackupRestoreTransactionRunner(chatDatabase)
+    )
 
     override suspend fun exportBackup(password: String): BackupFile {
         val platforms = settingRepository.fetchPlatforms()
@@ -91,7 +107,7 @@ class BackupRepositoryImpl @Inject constructor(
         )
         val payload = json.decodeFromString(BackupPayload.serializer(), plainPayload)
 
-        chatDatabase.withTransaction {
+        restoreTransactionRunner.run {
             messageDao.deleteAll()
             chatRoomDao.deleteAll()
             aiMaskDao.deleteAll()
