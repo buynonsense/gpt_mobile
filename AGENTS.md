@@ -74,9 +74,22 @@
 ## 测试定位示例
 - 单元测试示例类：`dev.chungjungsoo.gptmobile.ExampleUnitTest`
 - 单元测试示例类：`dev.chungjungsoo.gptmobile.util.MarkdownUtilsTest`
+- 单元测试示例类：`dev.chungjungsoo.gptmobile.data.sync.PasswordCryptoHelperTest`
+- 单元测试示例类：`dev.chungjungsoo.gptmobile.data.sync.WebDavXmlParserTest`
+- 单元测试示例类：`dev.chungjungsoo.gptmobile.data.sync.model.BackupModelsTest`
 - 仪器测试示例类：`dev.chungjungsoo.gptmobile.ExampleInstrumentedTest`
+- 仪器测试示例类：`dev.chungjungsoo.gptmobile.presentation.ui.setting.SyncScreenTest`
 - 改动工具类、解析逻辑、纯 Kotlin 逻辑时，优先补或跑 `testDebugUnitTest`。
 - 改动 Compose UI、导航、Activity 集成、资源交互时，再考虑 `connectedDebugAndroidTest`。
+
+## 数据同步模块提示
+- 数据同步入口在设置页，核心 UI 位于 `presentation/ui/setting/SyncScreen.kt` 与 `SyncViewModel.kt`。
+- 同步数据层位于 `data/sync/`，核心实现包括：`BackupRepositoryImpl.kt`、`SyncRepositoryImpl.kt`、`WebDavRepositoryImpl.kt`、`PasswordCryptoHelper.kt`。
+- 全量备份范围包括 Room 中的聊天 / 消息 / 角色，以及 DataStore 中的设置与 API key。
+- 备份文件使用“用户输入的备份密码”加密；WebDAV 密码本地保存时使用 Android Keystore 加密。
+- 本地导入导出通过 Android SAF 实现；不要把文件读写逻辑塞进 ViewModel。
+- 云同步首版只做全量备份，不做自动合并。
+- 检测到冲突时，必须保持手动决策：允许用户覆盖云端，或先下载云端备份到恢复区，再由用户确认是否恢复到本地。
 
 ## CI 与质量门禁
 - `ktlint.yml`：PR 到 `main` 时运行 Kotlin 格式检查。

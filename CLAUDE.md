@@ -87,8 +87,17 @@ There are two local persistence mechanisms:
    - Migrations are centralized in `data/database/Migrations.kt`
 
 2. **DataStore Preferences** for app/provider settings
-   - `data/datastore/SettingDataSourceImpl.kt`
-   - Stores enabled providers, API URLs, tokens, model names, temperature/top-p, prompts, theme settings, and streaming style
+    - `data/datastore/SettingDataSourceImpl.kt`
+    - Stores enabled providers, API URLs, tokens, model names, temperature/top-p, prompts, theme settings, streaming style, and WebDAV sync config
+
+3. **Encrypted backup / sync layer** for full backup and restore
+   - `data/sync/BackupRepositoryImpl.kt`
+   - `data/sync/SyncRepositoryImpl.kt`
+   - `data/sync/WebDavRepositoryImpl.kt`
+   - `data/sync/PasswordCryptoHelper.kt`
+   - Full backups include Room data + DataStore settings + API keys
+   - Backup payload is encrypted with a user-provided backup password
+   - WebDAV password is stored locally using Android Keystore-backed encryption
 
 `DatabaseModule.kt` wires Room and DAOs. `DataStoreModule.kt` wires the preferences store.
 
@@ -164,6 +173,29 @@ Defaults are applied in the repository layer, not only in UI.
 
 This matters because setup screens and settings screens both read/write the same underlying provider configuration, but they do so through different ViewModels (`SetupViewModel`, `SettingViewModel`).
 
+### Backup and sync flow
+
+The app now has a dedicated sync screen under settings:
+
+- `presentation/ui/setting/SyncScreen.kt`
+- `presentation/ui/setting/SyncViewModel.kt`
+
+The sync flow currently supports:
+
+- generating a full encrypted backup JSON from local data
+- saving that backup to a user-selected local file through Android SAF
+- importing a backup JSON from a user-selected local file through Android SAF
+- restoring imported backup content into local storage after password confirmation
+- listing WebDAV backups
+- uploading local encrypted backups to WebDAV
+- downloading a remote WebDAV backup into the restore area for manual confirmation
+
+Conflict handling is intentionally manual:
+
+- uploads detect when the latest remote backup is newer than the current local export
+- users can either overwrite the remote backup or load the remote backup into the restore area and then explicitly confirm local restore
+- there is no automatic merge
+
 ## Current test surface
 
 Test coverage is currently light. The repository includes:
@@ -171,7 +203,23 @@ Test coverage is currently light. The repository includes:
 - unit tests under `app/src/test/`
 - instrumented tests under `app/src/androidTest/`
 
-The only clearly non-example unit test currently present is `MarkdownUtilsTest`, so many behavioral changes will require careful manual reasoning in addition to running Gradle tests.
+Notable current tests now include:
+
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/util/MarkdownUtilsTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/PasswordCryptoHelperTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/WebDavXmlParserTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/model/BackupModelsTest.kt`
+- `app/src/androidTest/kotlin/dev/chungjungsoo/gptmobile/presentation/ui/setting/SyncScreenTest.kt`
+
+For sync-related changes, prefer running:
+
+```bash
+./gradlew :app:testDebugUnitTest --tests "dev.chungjungsoo.gptmobile.data.sync.PasswordCryptoHelperTest"
+./gradlew :app:testDebugUnitTest --tests "dev.chungjungsoo.gptmobile.data.sync.WebDavXmlParserTest"
+./gradlew :app:testDebugUnitTest --tests "dev.chungjungsoo.gptmobile.data.sync.model.BackupModelsTest"
+./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=dev.chungjungsoo.gptmobile.presentation.ui.setting.SyncScreenTest
+./gradlew :app:assembleDebug
+```
 
 ## Notes from existing repo guidance
 
