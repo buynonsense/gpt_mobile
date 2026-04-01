@@ -4,8 +4,10 @@ import dev.chungjungsoo.gptmobile.data.dto.Platform
 import dev.chungjungsoo.gptmobile.data.dto.ThemeSetting
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
-import dev.chungjungsoo.gptmobile.data.sync.model.BackupEncryption
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupPayload
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupDatabase
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupSettings
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupSummary
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncConflict
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
@@ -324,9 +326,9 @@ class SyncRepositoryImplTest {
 
         private val localBackup = backupFile(exportedAt = 100L, chatRoomCount = 1)
 
-        override suspend fun exportBackup(password: String): BackupFile = localBackup
+        override suspend fun exportBackup(): BackupFile = localBackup
 
-        override suspend fun restoreBackup(fileContent: String, password: String) {
+        override suspend fun restoreBackup(fileContent: String) {
             throw UnsupportedOperationException("restoreBackup is not used in this test")
         }
 
@@ -361,15 +363,24 @@ class SyncRepositoryImplTest {
                 aiMaskCount = 0,
                 containsSecrets = false
             ),
-            encryption = BackupEncryption(
-                enabled = true,
-                algorithm = "AES/GCM/NoPadding",
-                kdf = "PBKDF2WithHmacSHA256",
-                iterations = 1,
-                salt = "salt",
-                iv = "iv"
+            payload = BackupPayload(
+                settings = BackupSettings(
+                    platforms = emptyList(),
+                    theme = dev.chungjungsoo.gptmobile.data.sync.model.BackupThemeSetting(
+                        dynamicTheme = "OFF",
+                        themeMode = "SYSTEM"
+                    ),
+                    streamingStyle = dev.chungjungsoo.gptmobile.data.sync.model.BackupStreamingStyle(
+                        value = 0,
+                        name = "TYPEWRITER"
+                    )
+                ),
+                database = BackupDatabase(
+                    chatRooms = emptyList(),
+                    messages = emptyList(),
+                    aiMasks = emptyList()
+                )
             ),
-            payload = "payload"
         )
     }
 

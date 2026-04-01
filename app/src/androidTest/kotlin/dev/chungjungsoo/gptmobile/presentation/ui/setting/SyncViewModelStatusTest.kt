@@ -11,8 +11,12 @@ import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import dev.chungjungsoo.gptmobile.data.sync.SyncOperationException
 import dev.chungjungsoo.gptmobile.data.sync.SyncRepository
-import dev.chungjungsoo.gptmobile.data.sync.model.BackupEncryption
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupPayload
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupDatabase
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupSettings
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupThemeSetting
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupStreamingStyle
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupSummary
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncConflict
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncErrorCategory
@@ -59,7 +63,6 @@ class SyncViewModelStatusTest {
             appContext = ApplicationProvider.getApplicationContext()
         )
 
-        firstViewModel.updateBackupPassword("pw")
         firstViewModel.exportBackup()
 
         waitUntilState(timeoutMillis = 5_000) {
@@ -81,7 +84,7 @@ class SyncViewModelStatusTest {
     }
 
     @Test
-    fun restoreImportedBackup_withoutPassword_recordsPasswordError() {
+    fun importBackupFile_setsFileNameAndExportedAt() {
         val settingRepository = FakeSettingRepository()
         val viewModel = SyncViewModel(
             syncRepository = FakeSyncRepository(),
@@ -89,21 +92,20 @@ class SyncViewModelStatusTest {
             appContext = ApplicationProvider.getApplicationContext()
         )
 
-        viewModel.updateImportedBackupJson("{\"backup\":true}")
-        viewModel.restoreImportedBackup()
+        viewModel.importBackupFile(
+            fileName = "backup.json",
+            content = VALID_BACKUP_JSON
+        )
 
-        waitUntilSnapshotSaved(settingRepository) {
-            it.lastOperation == SyncOperation.LOCAL_RESTORE
+        waitUntilState(timeoutMillis = 5_000) {
+            viewModel.uiState.value.importedBackupFileName != null
         }
 
         assertEquals(
-            SyncErrorCategory.BACKUP_PASSWORD_INVALID,
-            viewModel.uiState.value.syncStatusSnapshot?.lastErrorCategory
+            "backup.json",
+            viewModel.uiState.value.importedBackupFileName
         )
-        assertEquals(
-            settingRepository.lastSavedSnapshot,
-            viewModel.uiState.value.syncStatusSnapshot
-        )
+        assertEquals(1_234L, viewModel.uiState.value.importedBackupExportedAt)
     }
 
     @Test
@@ -119,7 +121,6 @@ class SyncViewModelStatusTest {
             appContext = context
         )
 
-        viewModel.updateBackupPassword("pw")
         viewModel.updateWebDavPassword("dav")
         viewModel.uploadBackup()
 
@@ -134,7 +135,7 @@ class SyncViewModelStatusTest {
     }
 
     @Test
-    fun loadImportedSummary_failure_withoutSyncOperation_keepsOriginalErrorMessage() {
+    fun restoreImportedBackup_failure_keepsOriginalErrorMessage() {
         val viewModel = SyncViewModel(
             syncRepository = FakeSyncRepository(
                 parseError = IllegalStateException("raw parse failure")
@@ -144,13 +145,33 @@ class SyncViewModelStatusTest {
         )
 
         viewModel.updateImportedBackupJson("broken")
-        viewModel.loadImportedSummary()
+        viewModel.restoreImportedBackup()
 
         waitUntilState(timeoutMillis = 5_000) {
             viewModel.uiState.value.errorMessage != null
         }
 
         assertEquals("raw parse failure", viewModel.uiState.value.errorMessage)
+    }
+
+    @Test
+    fun restoreImportedBackup_withoutImportedFile_showsImportRequiredError() {
+        val viewModel = SyncViewModel(
+            syncRepository = FakeSyncRepository(),
+            settingRepository = FakeSettingRepository(),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        viewModel.restoreImportedBackup()
+
+        waitUntilState(timeoutMillis = 5_000) {
+            viewModel.uiState.value.errorMessage != null
+        }
+
+        assertEquals(
+            ApplicationProvider.getApplicationContext<Context>().getString(R.string.backup_content_required_for_import),
+            viewModel.uiState.value.errorMessage
+        )
     }
 
     @Test
@@ -162,7 +183,6 @@ class SyncViewModelStatusTest {
             appContext = ApplicationProvider.getApplicationContext()
         )
 
-        viewModel.updateBackupPassword("pw")
         viewModel.uploadBackup()
 
         waitUntilState(timeoutMillis = 5_000) {
@@ -192,7 +212,6 @@ class SyncViewModelStatusTest {
         )
 
         populateWebDavForm(viewModel)
-        viewModel.updateBackupPassword("pw")
         viewModel.uploadBackup()
 
         waitUntilSnapshotSaved(settingRepository) {
@@ -241,7 +260,6 @@ class SyncViewModelStatusTest {
             appContext = ApplicationProvider.getApplicationContext()
         )
 
-        viewModel.updateBackupPassword("pw")
         viewModel.updateWebDavPassword("dav")
         viewModel.uploadBackup()
         waitUntilState(timeoutMillis = 5_000) {
@@ -276,7 +294,6 @@ class SyncViewModelStatusTest {
         )
 
         populateWebDavForm(viewModel)
-        viewModel.updateBackupPassword("pw")
         viewModel.uploadBackup()
         waitUntilState(timeoutMillis = 5_000) {
             viewModel.uiState.value.uploadConflict != null
@@ -381,9 +398,9 @@ class SyncViewModelStatusTest {
         private val allowConflictDetectionWithoutSavedConfig: Boolean = false
     ) : SyncRepository {
 
-        override suspend fun exportBackupJson(password: String): String = exportedBackupJson
+        override suspend fun exportBackupJson(): String = exportedBackupJson
 
-        override suspend fun restoreBackupJson(content: String, password: String) = Unit
+        override suspend fun restoreBackupJson(content: String) = Unit
 
         override suspend fun parseBackup(content: String): BackupFile {
             parseError?.let { throw it }
@@ -398,15 +415,24 @@ class SyncViewModelStatusTest {
                     aiMaskCount = 0,
                     containsSecrets = false
                 ),
-                encryption = BackupEncryption(
-                    enabled = false,
-                    algorithm = "",
-                    kdf = "",
-                    iterations = 0,
-                    salt = "",
-                    iv = ""
-                ),
-                payload = content
+                payload = BackupPayload(
+                    settings = BackupSettings(
+                        platforms = emptyList(),
+                        theme = BackupThemeSetting(
+                            dynamicTheme = "OFF",
+                            themeMode = "SYSTEM"
+                        ),
+                        streamingStyle = BackupStreamingStyle(
+                            value = 0,
+                            name = "TYPEWRITER"
+                        )
+                    ),
+                    database = BackupDatabase(
+                        chatRooms = emptyList(),
+                        messages = emptyList(),
+                        aiMasks = emptyList()
+                    )
+                )
             )
         }
 

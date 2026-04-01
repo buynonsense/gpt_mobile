@@ -5,7 +5,6 @@ import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
 import dev.chungjungsoo.gptmobile.data.database.dao.MessageDao
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupDatabase
-import dev.chungjungsoo.gptmobile.data.sync.model.BackupEncryption
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupPayload
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupSettings
@@ -28,7 +27,6 @@ class BackupRepositoryImpl internal constructor(
     private val messageDao: MessageDao,
     private val aiMaskDao: AiMaskDao,
     private val settingRepository: SettingRepository,
-    private val cryptoManager: BackupCryptoManager,
     private val restoreTransactionRunner: BackupRestoreTransactionRunner
 ) : BackupRepository {
 
@@ -45,11 +43,10 @@ class BackupRepositoryImpl internal constructor(
         messageDao = messageDao,
         aiMaskDao = aiMaskDao,
         settingRepository = settingRepository,
-        cryptoManager = cryptoManager,
         restoreTransactionRunner = RoomBackupRestoreTransactionRunner(chatDatabase)
     )
 
-    override suspend fun exportBackup(password: String): BackupFile {
+    override suspend fun exportBackup(): BackupFile {
         val platforms = settingRepository.fetchPlatforms()
         val themes = settingRepository.fetchThemes()
         val streamingStyle = settingRepository.fetchStreamingStyle()
@@ -69,8 +66,6 @@ class BackupRepositoryImpl internal constructor(
                 aiMasks = masks.map { it.toBackupModel() }
             )
         )
-        val plainPayload = json.encodeToString(BackupPayload.serializer(), payload)
-        val encrypted = cryptoManager.encryptForBackup(plainPayload, password)
 
         return BackupFile(
             schemaVersion = SCHEMA_VERSION,
@@ -83,29 +78,13 @@ class BackupRepositoryImpl internal constructor(
                 aiMaskCount = masks.size,
                 containsSecrets = platforms.any { !it.token.isNullOrBlank() }
             ),
-            encryption = BackupEncryption(
-                enabled = true,
-                algorithm = AES_ALGORITHM,
-                kdf = KDF_ALGORITHM,
-                iterations = encrypted.iterations,
-                salt = encrypted.salt,
-                iv = encrypted.iv
-            ),
-            payload = encrypted.cipherText
+            payload = payload
         )
     }
 
-    override suspend fun restoreBackup(fileContent: String, password: String) {
+    override suspend fun restoreBackup(fileContent: String) {
         val backupFile = parseBackupFile(fileContent)
-        require(backupFile.encryption.enabled) { "Backup encryption is required" }
-        val plainPayload = cryptoManager.decryptBackup(
-            cipherText = backupFile.payload,
-            password = password,
-            salt = backupFile.encryption.salt,
-            iv = backupFile.encryption.iv,
-            iterations = backupFile.encryption.iterations
-        )
-        val payload = json.decodeFromString(BackupPayload.serializer(), plainPayload)
+        val payload = backupFile.payload
 
         restoreTransactionRunner.run {
             messageDao.deleteAll()
@@ -143,7 +122,5 @@ class BackupRepositoryImpl internal constructor(
         const val SCHEMA_VERSION = 1
         const val FULL_BACKUP = "full"
         private const val APP_VERSION = "0.9.6"
-        private const val AES_ALGORITHM = "AES/GCM/NoPadding"
-        private const val KDF_ALGORITHM = "PBKDF2WithHmacSHA256"
     }
 }

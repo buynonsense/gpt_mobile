@@ -33,23 +33,30 @@ class SyncViewModel @Inject constructor(
 ) : ViewModel() {
 
     data class UiState(
-        val backupPassword: String = "",
-        val restorePassword: String = "",
         val webDavPassword: String = "",
         val webDavBaseUrl: String = "",
         val webDavUsername: String = "",
         val webDavRemotePath: String = "",
+        val selectedTab: SyncPageTab = SyncPageTab.LOCAL,
+        val showWebDavConfigDialog: Boolean = false,
         val selectedRemoteFile: String = "",
         val isBusy: Boolean = false,
         val statusMessage: String? = null,
         val errorMessage: String? = null,
-        val localBackupJson: String? = null,
+        val generatedBackupJson: String? = null,
+        val pendingExportSaveRequest: Boolean = false,
         val importedBackupJson: String? = null,
-        val importedBackupSummary: BackupFile? = null,
+        val importedBackupFileName: String? = null,
+        val importedBackupExportedAt: Long? = null,
         val remoteBackups: List<WebDavRemoteFile> = emptyList(),
         val uploadConflict: SyncConflict? = null,
         val syncStatusSnapshot: SyncStatusSnapshot? = null
     )
+
+    enum class SyncPageTab {
+        LOCAL,
+        WEBDAV
+    }
 
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -71,10 +78,6 @@ class SyncViewModel @Inject constructor(
         }
     }
 
-    fun updateBackupPassword(value: String) = _uiState.update { it.copy(backupPassword = value) }
-
-    fun updateRestorePassword(value: String) = _uiState.update { it.copy(restorePassword = value) }
-
     fun updateWebDavPassword(value: String) = _uiState.update { it.copy(webDavPassword = value) }
 
     fun updateWebDavBaseUrl(value: String) = _uiState.update { it.copy(webDavBaseUrl = value) }
@@ -85,66 +88,67 @@ class SyncViewModel @Inject constructor(
 
     fun updateSelectedRemoteFile(value: String) = _uiState.update { it.copy(selectedRemoteFile = value) }
 
+    fun selectTab(tab: SyncPageTab) = _uiState.update { it.copy(selectedTab = tab) }
+
+    fun showWebDavConfigDialog() = _uiState.update { it.copy(showWebDavConfigDialog = true) }
+
+    fun hideWebDavConfigDialog() = _uiState.update { it.copy(showWebDavConfigDialog = false) }
+
     fun updateImportedBackupJson(value: String) {
-        _uiState.update { it.copy(importedBackupJson = value, importedBackupSummary = null) }
-    }
-
-    fun loadImportedSummary() {
-        val content = _uiState.value.importedBackupJson.orEmpty()
-        if (content.isBlank()) {
-            showError(R.string.backup_content_required_for_import)
-            return
-        }
-
-        launchSafely(action = {
-            val summary = syncRepository.parseBackup(content)
-            showStatus(R.string.backup_summary_parsed)
-            _uiState.update { it.copy(importedBackupSummary = summary) }
-        }, fallbackErrorResId = R.string.backup_import_failed)
-    }
-
-    fun exportBackup() {
-        val password = _uiState.value.backupPassword
-        if (password.isBlank()) {
-            handleValidationFailure(
-                operation = SyncOperation.LOCAL_EXPORT,
-                validationFailure = SyncErrorCategory.BACKUP_PASSWORD_INVALID
+        _uiState.update {
+            it.copy(
+                importedBackupJson = value,
+                importedBackupFileName = null,
+                importedBackupExportedAt = null
             )
-            return
         }
+    }
 
+    fun exportBackup(requestSaveAfterExport: Boolean = false) {
         launchSafely(action = {
-            val content = syncRepository.exportBackupJson(password)
+            val backupJson = syncRepository.exportBackupJson()
             recordOperationSuccess(SyncOperation.LOCAL_EXPORT)
             showStatus(R.string.backup_generated)
             _uiState.update {
                 it.copy(
-                    localBackupJson = content
+                    generatedBackupJson = backupJson,
+                    pendingExportSaveRequest = requestSaveAfterExport
                 )
             }
         }, operation = SyncOperation.LOCAL_EXPORT, fallbackErrorResId = R.string.backup_export_failed)
     }
 
+    fun consumePendingExportSaveRequest() {
+        _uiState.update { it.copy(pendingExportSaveRequest = false) }
+    }
+
     fun restoreImportedBackup() {
         val content = _uiState.value.importedBackupJson.orEmpty()
-        val password = _uiState.value.restorePassword
         if (content.isBlank()) {
             showError(R.string.backup_content_required_for_import)
             return
         }
-        if (password.isBlank()) {
-            handleValidationFailure(
-                operation = SyncOperation.LOCAL_RESTORE,
-                validationFailure = SyncErrorCategory.BACKUP_PASSWORD_INVALID
-            )
-            return
-        }
 
         launchSafely(action = {
-            syncRepository.restoreBackupJson(content, password)
+            syncRepository.parseBackup(content)
+            syncRepository.restoreBackupJson(content)
             recordOperationSuccess(SyncOperation.LOCAL_RESTORE)
             showStatus(R.string.backup_restored)
-        }, operation = SyncOperation.LOCAL_RESTORE, fallbackErrorResId = R.string.backup_restore_failed)
+        }, fallbackErrorResId = R.string.backup_restore_failed)
+    }
+
+    fun importBackupFile(fileName: String, content: String) {
+        launchSafely(action = {
+            val backupFile = syncRepository.parseBackup(content)
+            _uiState.update {
+                it.copy(
+                    importedBackupJson = content,
+                    importedBackupFileName = fileName,
+                    importedBackupExportedAt = backupFile.exportedAt
+                )
+            }
+            showStatus(R.string.backup_summary_parsed)
+        }, fallbackErrorResId = R.string.backup_import_failed)
     }
 
     fun saveWebDavConfig() {
@@ -190,7 +194,10 @@ class SyncViewModel @Inject constructor(
     fun loadRemoteBackups() {
         val password = _uiState.value.webDavPassword
         if (password.isBlank()) {
-            showError(R.string.webdav_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.CLOUD_DOWNLOAD,
+                validationFailure = SyncErrorCategory.WEBDAV_CONFIG_INVALID
+            )
             return
         }
 
@@ -208,13 +215,6 @@ class SyncViewModel @Inject constructor(
 
     fun uploadBackup(overwrite: Boolean = false) {
         val state = _uiState.value
-        if (state.backupPassword.isBlank()) {
-            handleValidationFailure(
-                operation = SyncOperation.CLOUD_UPLOAD,
-                validationFailure = SyncErrorCategory.BACKUP_PASSWORD_INVALID
-            )
-            return
-        }
         if (state.webDavPassword.isBlank()) {
             handleValidationFailure(
                 operation = SyncOperation.CLOUD_UPLOAD,
@@ -234,7 +234,7 @@ class SyncViewModel @Inject constructor(
             }
 
             val fileName = syncRepository.uploadBackup(
-                password = state.backupPassword,
+                password = state.webDavPassword,
                 overwrite = overwrite
             )
             val remoteFiles = syncRepository.listRemoteBackups(state.webDavPassword)
@@ -269,7 +269,7 @@ class SyncViewModel @Inject constructor(
 
         launchSafely(action = {
             val content = syncRepository.downloadRemoteBackup(state.webDavPassword, state.selectedRemoteFile)
-            val summary = syncRepository.parseBackup(content)
+            val backupFile = syncRepository.parseBackup(content)
             recordOperationSuccess(
                 operation = SyncOperation.CLOUD_DOWNLOAD,
                 remoteFileName = state.selectedRemoteFile
@@ -278,7 +278,8 @@ class SyncViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     importedBackupJson = content,
-                    importedBackupSummary = summary
+                    importedBackupFileName = state.selectedRemoteFile,
+                    importedBackupExportedAt = backupFile.exportedAt
                 )
             }
         }, operation = SyncOperation.CLOUD_DOWNLOAD)
@@ -326,7 +327,7 @@ class SyncViewModel @Inject constructor(
 
         launchSafely(action = {
             val content = syncRepository.downloadRemoteBackup(password, conflict.remoteFileName)
-            val summary = syncRepository.parseBackup(content)
+            val backupFile = syncRepository.parseBackup(content)
             recordOperationSuccess(
                 operation = SyncOperation.CONFLICT_LOAD_REMOTE,
                 remoteFileName = conflict.remoteFileName
@@ -335,7 +336,8 @@ class SyncViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     importedBackupJson = content,
-                    importedBackupSummary = summary,
+                    importedBackupFileName = conflict.remoteFileName,
+                    importedBackupExportedAt = backupFile.exportedAt,
                     selectedRemoteFile = conflict.remoteFileName,
                     uploadConflict = null
                 )
@@ -465,6 +467,15 @@ class SyncViewModel @Inject constructor(
                 lastOperationSuccess = true,
                 lastErrorCategory = null,
                 lastRemoteFileName = remoteFileName ?: baseSnapshot.lastRemoteFileName
+            )
+        }
+    }
+
+    fun setImportedBackupMetadata(fileName: String, exportedAt: Long?) {
+        _uiState.update {
+            it.copy(
+                importedBackupFileName = fileName,
+                importedBackupExportedAt = exportedAt
             )
         }
     }

@@ -148,12 +148,10 @@ class SyncScreenTest {
         }
 
         composeRule.onNodeWithTag(SAVE_BACKUP_TO_FILE_BUTTON_TAG).performScrollTo().performClick()
-
-        composeRule.onNodeWithTag(SYNC_ERROR_MESSAGE_TAG).performScrollTo().assertIsDisplayed()
     }
 
     @Test
-    fun conflictDialog_useRemoteBackup_loadsRemoteBackupIntoRestoreArea() {
+    fun conflictDialog_useRemoteBackup_loadsRemoteBackupMetadata() {
         val viewModel = SyncViewModel(
             syncRepository = FakeSyncRepository(
                 conflict = SyncConflict(
@@ -163,7 +161,7 @@ class SyncScreenTest {
                     remoteExportedAt = 20L,
                     remoteFileName = "remote.json"
                 ),
-                remoteBackupContent = "{\"remote\":true}"
+                remoteBackupContent = VALID_BACKUP_JSON
             ),
             appContext = ApplicationProvider.getApplicationContext()
         )
@@ -178,13 +176,12 @@ class SyncScreenTest {
         }
 
         composeRule.runOnIdle {
-            viewModel.updateBackupPassword("backup")
             viewModel.updateWebDavPassword("dav")
         }
 
         composeRule.onNodeWithText("上传到云端").performScrollTo().performClick()
         composeRule.onNodeWithText("以云端为准").assertIsDisplayed().performClick()
-        composeRule.onNodeWithText("{\"remote\":true}").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("remote.json").performScrollTo().assertIsDisplayed()
     }
 
     private fun setContentWithSnapshot(snapshot: SyncStatusSnapshot?) {
@@ -247,13 +244,13 @@ class SyncScreenTest {
         private val conflict: SyncConflict? = null,
         private val remoteBackupContent: String = ""
     ) : SyncRepository {
-        override suspend fun exportBackupJson(password: String): String = ""
+        override suspend fun exportBackupJson(): String = "{\"backup\":true}"
 
-        override suspend fun restoreBackupJson(content: String, password: String) = Unit
+        override suspend fun restoreBackupJson(content: String) = Unit
 
         override suspend fun parseBackup(content: String): BackupFile = BackupFile(
             schemaVersion = 1,
-            exportedAt = 0L,
+            exportedAt = 1_234L,
             appVersion = "test",
             backupType = "local",
             summary = BackupSummary(
@@ -262,15 +259,24 @@ class SyncScreenTest {
                 aiMaskCount = 0,
                 containsSecrets = false
             ),
-            encryption = dev.chungjungsoo.gptmobile.data.sync.model.BackupEncryption(
-                enabled = false,
-                algorithm = "",
-                kdf = "",
-                iterations = 0,
-                salt = "",
-                iv = ""
-            ),
-            payload = ""
+            payload = dev.chungjungsoo.gptmobile.data.sync.model.BackupPayload(
+                settings = dev.chungjungsoo.gptmobile.data.sync.model.BackupSettings(
+                    platforms = emptyList(),
+                    theme = dev.chungjungsoo.gptmobile.data.sync.model.BackupThemeSetting(
+                        dynamicTheme = "OFF",
+                        themeMode = "SYSTEM"
+                    ),
+                    streamingStyle = dev.chungjungsoo.gptmobile.data.sync.model.BackupStreamingStyle(
+                        value = 0,
+                        name = "TYPEWRITER"
+                    )
+                ),
+                database = dev.chungjungsoo.gptmobile.data.sync.model.BackupDatabase(
+                    chatRooms = emptyList(),
+                    messages = emptyList(),
+                    aiMasks = emptyList()
+                )
+            )
         )
 
         override suspend fun testWebDavConnection(baseUrl: String, username: String, remotePath: String, password: String) = Unit
@@ -290,5 +296,9 @@ class SyncScreenTest {
         override suspend fun uploadBackup(password: String, overwrite: Boolean): String = ""
 
         override suspend fun downloadRemoteBackup(password: String, remoteFileName: String): String = remoteBackupContent
+    }
+
+    private companion object {
+        const val VALID_BACKUP_JSON = "{\"schemaVersion\":1,\"exportedAt\":1234,\"appVersion\":\"test\",\"backupType\":\"full\",\"summary\":{\"chatRoomCount\":0,\"messageCount\":0,\"aiMaskCount\":0,\"containsSecrets\":false},\"payload\":{\"settings\":{\"platforms\":[],\"theme\":{\"dynamicTheme\":\"OFF\",\"themeMode\":\"SYSTEM\"},\"streamingStyle\":{\"value\":0,\"name\":\"TYPEWRITER\"}},\"database\":{\"chatRooms\":[],\"messages\":[],\"aiMasks\":[]}}}"
     }
 }

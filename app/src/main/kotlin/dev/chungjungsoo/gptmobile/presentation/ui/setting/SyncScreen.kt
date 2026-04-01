@@ -6,12 +6,13 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.activity.result.contract.ActivityResultContracts.OpenDocument
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,32 +25,33 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chungjungsoo.gptmobile.R
-import dev.chungjungsoo.gptmobile.presentation.common.PrimaryLongButton
 
 private const val SYNC_SCREEN_LOG_TAG = "SyncScreen"
 internal const val SAVE_BACKUP_TO_FILE_BUTTON_TAG = "save_backup_to_file_button"
 internal const val IMPORT_BACKUP_FROM_FILE_BUTTON_TAG = "import_backup_from_file_button"
 internal const val SYNC_ERROR_MESSAGE_TAG = "sync_error_message"
 internal const val SYNC_WEBDAV_SECTION_TITLE_TAG = "sync_webdav_section_title"
+internal const val SYNC_TAB_LOCAL_TAG = "sync_tab_local"
+internal const val SYNC_TAB_WEBDAV_TAG = "sync_tab_webdav"
+internal const val OPEN_WEBDAV_CONFIG_DIALOG_TAG = "open_webdav_config_dialog"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,25 +60,15 @@ fun SyncScreen(
     syncViewModel: SyncViewModel = hiltViewModel()
 ) {
     val uiState by syncViewModel.uiState.collectAsStateWithLifecycle()
-    val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
-    val backupCopiedMessage = stringResource(R.string.backup_copied)
-    val saveBackupToFileMessage = stringResource(R.string.save_backup_to_file)
-    val backupFileName = stringResource(R.string.backup_file_name)
-    val backupSaveRequiresContentMessage = stringResource(R.string.backup_save_requires_content)
-    val backupSavedMessage = stringResource(R.string.backup_saved_to_file)
-    val backupSaveFailedMessage = stringResource(R.string.backup_save_failed)
-    val importBackupFromFileMessage = stringResource(R.string.import_backup_from_file)
-    val backupImportFailedMessage = stringResource(R.string.backup_import_failed)
     val saveBackupLauncher = rememberLauncherForActivityResult(CreateDocument("application/json")) { uri ->
         handleBackupFileCreated(
             uri = uri,
-            backupContent = uiState.localBackupJson,
             context = context,
             syncViewModel = syncViewModel,
-            backupSaveRequiresContentMessage = backupSaveRequiresContentMessage,
-            backupSavedMessage = backupSavedMessage,
-            backupSaveFailedMessage = backupSaveFailedMessage
+            backupContent = uiState.generatedBackupJson,
+            backupSavedMessage = context.getString(R.string.backup_saved_to_file),
+            backupSaveFailedMessage = context.getString(R.string.backup_save_failed)
         )
     }
     val importBackupLauncher = rememberLauncherForActivityResult(OpenDocument()) { uri ->
@@ -84,8 +76,15 @@ fun SyncScreen(
             uri = uri,
             context = context,
             syncViewModel = syncViewModel,
-            backupImportFailedMessage = backupImportFailedMessage
+            backupImportFailedMessage = context.getString(R.string.backup_import_failed)
         )
+    }
+
+    LaunchedEffect(uiState.pendingExportSaveRequest, uiState.generatedBackupJson) {
+        if (uiState.pendingExportSaveRequest && !uiState.generatedBackupJson.isNullOrBlank()) {
+            syncViewModel.consumePendingExportSaveRequest()
+            saveBackupLauncher.launch(context.getString(R.string.backup_file_name))
+        }
     }
 
     Scaffold(
@@ -119,227 +118,40 @@ fun SyncScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(bottom = 24.dp)
         ) {
-            SectionTitle(stringResource(R.string.local_backup))
-            SectionDescription(stringResource(R.string.local_backup_description))
-            PasswordField(
-                value = uiState.backupPassword,
-                label = stringResource(R.string.backup_password),
-                onValueChange = syncViewModel::updateBackupPassword
-            )
-            Text(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                text = stringResource(R.string.backup_password_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            PrimaryLongButton(
-                text = stringResource(R.string.generate_backup),
-                enabled = !uiState.isBusy,
-                onClick = syncViewModel::exportBackup
-            )
-            TextButton(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                enabled = !uiState.localBackupJson.isNullOrBlank(),
-                onClick = {
-                    clipboardManager.setText(AnnotatedString(uiState.localBackupJson.orEmpty()))
-                    syncViewModel.showStatus(backupCopiedMessage)
-                }
-            ) {
-                Text(stringResource(R.string.copy_backup_content))
-            }
-            TextButton(
-                modifier = Modifier
-                    .padding(horizontal = 20.dp)
-                    .testTag(SAVE_BACKUP_TO_FILE_BUTTON_TAG),
-                enabled = !uiState.isBusy,
-                onClick = {
-                    launchBackupSave(
-                        backupContent = uiState.localBackupJson,
-                        backupFileName = backupFileName,
-                        backupSaveRequiresContentMessage = backupSaveRequiresContentMessage,
-                        syncViewModel = syncViewModel,
-                        launchCreateDocument = saveBackupLauncher::launch
-                    )
-                }
-            ) {
-                Text(saveBackupToFileMessage)
-            }
-            OutlinedTextField(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                value = uiState.localBackupJson.orEmpty(),
-                onValueChange = {},
-                minLines = 6,
-                readOnly = true,
-                label = { Text(stringResource(R.string.generated_backup_content)) }
-            )
-            Text(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                text = stringResource(R.string.generated_backup_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+            SyncTabs(
+                selectedTab = uiState.selectedTab,
+                onSelectTab = syncViewModel::selectTab
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp))
 
-            SectionTitle(stringResource(R.string.restore_backup))
-            SectionDescription(stringResource(R.string.restore_backup_description))
-            TextButton(
-                modifier = Modifier
-                    .padding(horizontal = 20.dp)
-                    .testTag(IMPORT_BACKUP_FROM_FILE_BUTTON_TAG),
-                enabled = !uiState.isBusy,
-                onClick = { importBackupLauncher.launch(arrayOf("application/json")) }
-            ) {
-                Text(importBackupFromFileMessage)
-            }
-            OutlinedTextField(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                value = uiState.importedBackupJson.orEmpty(),
-                onValueChange = syncViewModel::updateImportedBackupJson,
-                minLines = 6,
-                label = { Text(stringResource(R.string.backup_content)) }
-            )
-            PasswordField(
-                value = uiState.restorePassword,
-                label = stringResource(R.string.restore_password),
-                onValueChange = syncViewModel::updateRestorePassword
-            )
-            Text(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                text = stringResource(R.string.restore_password_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TextButton(onClick = syncViewModel::loadImportedSummary, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.parse_backup_summary))
-                }
-                TextButton(onClick = syncViewModel::restoreImportedBackup, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.restore_to_local))
-                }
-            }
-            uiState.importedBackupSummary?.let { backup ->
-                BackupSummaryCard(
-                    summaryText = stringResource(
-                        R.string.backup_summary_format,
-                        backup.summary.chatRoomCount,
-                        backup.summary.messageCount,
-                        backup.summary.aiMaskCount,
-                        if (backup.summary.containsSecrets) stringResource(R.string.contains_api_keys) else stringResource(R.string.no_api_keys)
-                    )
+            when (uiState.selectedTab) {
+                SyncViewModel.SyncPageTab.LOCAL -> LocalBackupContent(
+                    uiState = uiState,
+                    onExportBackup = { syncViewModel.exportBackup(requestSaveAfterExport = true) },
+                    onImportFromFile = { importBackupLauncher.launch(arrayOf("application/json")) },
+                    onRestoreBackup = syncViewModel::restoreImportedBackup
+                )
+
+                SyncViewModel.SyncPageTab.WEBDAV -> WebDavContent(
+                    uiState = uiState,
+                    onOpenConfigDialog = syncViewModel::showWebDavConfigDialog,
+                    onTestConnection = syncViewModel::testWebDavConnection,
+                    onRefreshRemoteBackups = syncViewModel::loadRemoteBackups,
+                    onUpload = { syncViewModel.uploadBackup(overwrite = false) },
+                    onDownload = syncViewModel::downloadSelectedRemoteBackup,
+                    onSelectedRemoteFileChange = syncViewModel::updateSelectedRemoteFile
                 )
             }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp))
-
-            SectionTitle(stringResource(R.string.sync_status_title))
-            SectionDescription(stringResource(R.string.sync_status_description))
-            SyncStatusCard(snapshot = uiState.syncStatusSnapshot)
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp))
-
-            SectionTitle(
-                text = stringResource(R.string.webdav_sync),
-                modifier = Modifier.testTag(SYNC_WEBDAV_SECTION_TITLE_TAG)
-            )
-            SectionDescription(stringResource(R.string.webdav_sync_description))
-            SimpleField(
-                value = uiState.webDavBaseUrl,
-                label = stringResource(R.string.webdav_base_url),
-                onValueChange = syncViewModel::updateWebDavBaseUrl
-            )
-            SimpleField(
-                value = uiState.webDavUsername,
-                label = stringResource(R.string.webdav_username),
-                onValueChange = syncViewModel::updateWebDavUsername
-            )
-            PasswordField(
-                value = uiState.webDavPassword,
-                label = stringResource(R.string.webdav_password),
-                onValueChange = syncViewModel::updateWebDavPassword
-            )
-            SimpleField(
-                value = uiState.webDavRemotePath,
-                label = stringResource(R.string.webdav_remote_path),
-                onValueChange = syncViewModel::updateWebDavRemotePath
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TextButton(onClick = syncViewModel::saveWebDavConfig, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.save_webdav_config))
-                }
-                TextButton(onClick = syncViewModel::testWebDavConnection, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.test_connection))
-                }
-                TextButton(onClick = syncViewModel::loadRemoteBackups, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.refresh_remote_backups))
-                }
-            }
-            SimpleField(
-                value = uiState.selectedRemoteFile,
-                label = stringResource(R.string.selected_remote_backup),
-                onValueChange = syncViewModel::updateSelectedRemoteFile
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                TextButton(onClick = { syncViewModel.uploadBackup(overwrite = false) }, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.upload_to_cloud))
-                }
-                TextButton(onClick = syncViewModel::downloadSelectedRemoteBackup, enabled = !uiState.isBusy) {
-                    Text(stringResource(R.string.download_from_cloud))
-                }
-            }
-            BackupSummaryCard(
-                summaryText = if (uiState.remoteBackups.isEmpty()) {
-                    stringResource(R.string.no_remote_backups)
-                } else {
-                    uiState.remoteBackups.joinToString(separator = "\n") { file ->
-                        val segments = buildList {
-                            add(file.name)
-                            file.modifiedAt?.let { add(it) }
-                            file.contentLength?.let {
-                                add(context.getString(R.string.remote_backup_size_bytes, it))
-                            }
-                        }
-                        segments.reduce { acc, segment ->
-                            context.getString(R.string.remote_backup_list_item, acc, segment)
-                        }
-                    }
-                }
-            )
 
             uiState.statusMessage?.let { message ->
-                BackupSummaryCard(summaryText = message)
+                SyncMessageCard(message = message)
             }
             uiState.errorMessage?.let { error ->
-                BackupSummaryCard(
-                    summaryText = error,
+                SyncMessageCard(
+                    message = error,
                     modifier = Modifier.testTag(SYNC_ERROR_MESSAGE_TAG)
                 )
-            }
-            TextButton(
-                modifier = Modifier.padding(horizontal = 20.dp),
-                onClick = syncViewModel::clearMessages,
-                enabled = uiState.statusMessage != null || uiState.errorMessage != null
-            ) {
-                Text(stringResource(R.string.clear_status_message))
             }
 
             if (uiState.isBusy) {
@@ -353,6 +165,21 @@ fun SyncScreen(
                 }
             }
         }
+    }
+
+    if (uiState.showWebDavConfigDialog) {
+        WebDavConfigDialog(
+            uiState = uiState,
+            onDismiss = syncViewModel::hideWebDavConfigDialog,
+            onBaseUrlChange = syncViewModel::updateWebDavBaseUrl,
+            onUsernameChange = syncViewModel::updateWebDavUsername,
+            onPasswordChange = syncViewModel::updateWebDavPassword,
+            onRemotePathChange = syncViewModel::updateWebDavRemotePath,
+            onSave = {
+                syncViewModel.saveWebDavConfig()
+                syncViewModel.hideWebDavConfigDialog()
+            }
+        )
     }
 
     uiState.uploadConflict?.let { conflict ->
@@ -388,51 +215,301 @@ fun SyncScreen(
     }
 }
 
+@Composable
+private fun SyncTabs(
+    selectedTab: SyncViewModel.SyncPageTab,
+    onSelectTab: (SyncViewModel.SyncPageTab) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SyncTabCard(
+            text = stringResource(R.string.sync_tab_local_backup),
+            selected = selectedTab == SyncViewModel.SyncPageTab.LOCAL,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(SYNC_TAB_LOCAL_TAG),
+            onClick = { onSelectTab(SyncViewModel.SyncPageTab.LOCAL) }
+        )
+        SyncTabCard(
+            text = stringResource(R.string.sync_tab_webdav),
+            selected = selectedTab == SyncViewModel.SyncPageTab.WEBDAV,
+            modifier = Modifier
+                .weight(1f)
+                .testTag(SYNC_TAB_WEBDAV_TAG),
+            onClick = { onSelectTab(SyncViewModel.SyncPageTab.WEBDAV) }
+        )
+    }
+}
+
+@Composable
+private fun SyncTabCard(text: String, selected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    OutlinedCard(modifier = modifier.clickable(onClick = onClick)) {
+        Text(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 20.dp),
+            text = text,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.titleMedium
+        )
+    }
+}
+
+@Composable
+private fun LocalBackupContent(
+    uiState: SyncViewModel.UiState,
+    onExportBackup: () -> Unit,
+    onImportFromFile: () -> Unit,
+    onRestoreBackup: () -> Unit
+) {
+    SectionTitle(stringResource(R.string.local_backup))
+    SectionDescription(stringResource(R.string.local_backup_description))
+    SectionDescription(stringResource(R.string.backup_file_contains_api_key_warning))
+
+    TextButton(
+        modifier = Modifier
+            .padding(horizontal = 20.dp)
+            .testTag(SAVE_BACKUP_TO_FILE_BUTTON_TAG),
+        enabled = !uiState.isBusy,
+        onClick = onExportBackup
+    ) {
+        Text(stringResource(R.string.generate_backup_file))
+    }
+    TextButton(
+        modifier = Modifier
+            .padding(horizontal = 20.dp)
+            .testTag(IMPORT_BACKUP_FROM_FILE_BUTTON_TAG),
+        enabled = !uiState.isBusy,
+        onClick = onImportFromFile
+    ) {
+        Text(stringResource(R.string.import_backup_from_file))
+    }
+
+    SectionTitle(stringResource(R.string.restore_backup))
+    SectionDescription(stringResource(R.string.restore_backup_description))
+
+    if (uiState.importedBackupFileName == null) {
+        SyncMessageCard(message = stringResource(R.string.sync_status_empty))
+    } else {
+        SyncMessageCard(
+            message = buildString {
+                append(stringResource(R.string.backup_file_name_label))
+                append("：")
+                append(uiState.importedBackupFileName)
+                uiState.importedBackupExportedAt?.let {
+                    append("\n")
+                    append(stringResource(R.string.backup_file_exported_at_label))
+                    append("：")
+                    append(formatTimestamp(it))
+                }
+            }
+        )
+        TextButton(
+            modifier = Modifier.padding(horizontal = 20.dp),
+            enabled = !uiState.isBusy,
+            onClick = onRestoreBackup
+        ) {
+            Text(stringResource(R.string.restore_to_local))
+        }
+    }
+}
+
+@Composable
+private fun WebDavContent(
+    uiState: SyncViewModel.UiState,
+    onOpenConfigDialog: () -> Unit,
+    onTestConnection: () -> Unit,
+    onRefreshRemoteBackups: () -> Unit,
+    onUpload: () -> Unit,
+    onDownload: () -> Unit,
+    onSelectedRemoteFileChange: (String) -> Unit
+) {
+    SectionTitle(stringResource(R.string.sync_status_title))
+    SectionDescription(stringResource(R.string.sync_status_description))
+    SyncStatusCard(snapshot = uiState.syncStatusSnapshot)
+
+    HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp))
+
+    SectionTitle(
+        text = stringResource(R.string.webdav_sync),
+        modifier = Modifier.testTag(SYNC_WEBDAV_SECTION_TITLE_TAG)
+    )
+    SectionDescription(stringResource(R.string.webdav_sync_description))
+    TextButton(
+        modifier = Modifier
+            .padding(horizontal = 20.dp)
+            .testTag(OPEN_WEBDAV_CONFIG_DIALOG_TAG),
+        enabled = !uiState.isBusy,
+        onClick = onOpenConfigDialog
+    ) {
+        Text(stringResource(R.string.open_webdav_config_dialog))
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TextButton(onClick = onTestConnection, enabled = !uiState.isBusy) {
+            Text(stringResource(R.string.test_connection))
+        }
+        TextButton(onClick = onRefreshRemoteBackups, enabled = !uiState.isBusy) {
+            Text(stringResource(R.string.refresh_remote_backups))
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TextButton(onClick = onUpload, enabled = !uiState.isBusy) {
+            Text(stringResource(R.string.upload_to_cloud))
+        }
+        TextButton(onClick = onDownload, enabled = !uiState.isBusy) {
+            Text(stringResource(R.string.download_from_cloud))
+        }
+    }
+
+    SectionDescription(stringResource(R.string.selected_remote_backup))
+    uiState.remoteBackups.forEach { file ->
+        SyncRemoteFileItem(
+            fileName = file.name,
+            selected = uiState.selectedRemoteFile == file.name,
+            onClick = { onSelectedRemoteFileChange(file.name) }
+        )
+    }
+    if (uiState.remoteBackups.isEmpty()) {
+        SyncMessageCard(message = stringResource(R.string.no_remote_backups))
+    }
+}
+
+@Composable
+private fun SyncRemoteFileItem(fileName: String, selected: Boolean, onClick: () -> Unit) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Text(
+            modifier = Modifier.padding(16.dp),
+            text = fileName,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun WebDavConfigDialog(
+    uiState: SyncViewModel.UiState,
+    onDismiss: () -> Unit,
+    onBaseUrlChange: (String) -> Unit,
+    onUsernameChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onRemotePathChange: (String) -> Unit,
+    onSave: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onSave) {
+                Text(stringResource(R.string.save_webdav_config))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.webdav_config_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SimpleField(
+                    value = uiState.webDavBaseUrl,
+                    label = stringResource(R.string.webdav_base_url),
+                    onValueChange = onBaseUrlChange
+                )
+                SimpleField(
+                    value = uiState.webDavUsername,
+                    label = stringResource(R.string.webdav_username),
+                    onValueChange = onUsernameChange
+                )
+                PasswordField(
+                    value = uiState.webDavPassword,
+                    label = stringResource(R.string.webdav_password),
+                    onValueChange = onPasswordChange
+                )
+                SimpleField(
+                    value = uiState.webDavRemotePath,
+                    label = stringResource(R.string.webdav_remote_path),
+                    onValueChange = onRemotePathChange
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun SyncMessageCard(message: String, modifier: Modifier = Modifier) {
+    OutlinedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 12.dp)
+    ) {
+        Text(
+            modifier = Modifier.padding(16.dp),
+            text = message,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
 private fun handleBackupFileSelected(
     uri: Uri?,
     context: Context,
     syncViewModel: SyncViewModel,
     backupImportFailedMessage: String
 ) {
+    if (uri == null) {
+        return
+    }
     val content = readBackupFromUri(context, uri)
     if (content.isNullOrBlank()) {
         syncViewModel.showError(backupImportFailedMessage)
         return
     }
 
-    syncViewModel.updateImportedBackupJson(content)
-    syncViewModel.loadImportedSummary()
-}
-
-private fun launchBackupSave(
-    backupContent: String?,
-    backupFileName: String,
-    backupSaveRequiresContentMessage: String,
-    syncViewModel: SyncViewModel,
-    launchCreateDocument: (String) -> Unit
-) {
-    if (backupContent.isNullOrBlank()) {
-        syncViewModel.showError(backupSaveRequiresContentMessage)
-        return
-    }
-
-    launchCreateDocument(backupFileName)
+    syncViewModel.importBackupFile(
+        fileName = uri.lastPathSegment?.substringAfterLast('/') ?: context.getString(R.string.backup_file_name),
+        content = content
+    )
 }
 
 private fun handleBackupFileCreated(
     uri: Uri?,
-    backupContent: String?,
     context: Context,
     syncViewModel: SyncViewModel,
-    backupSaveRequiresContentMessage: String,
+    backupContent: String?,
     backupSavedMessage: String,
     backupSaveFailedMessage: String
 ) {
-    when {
-        uri == null -> Unit
-        backupContent.isNullOrBlank() -> syncViewModel.showError(backupSaveRequiresContentMessage)
-        writeBackupToUri(context, uri, backupContent) -> syncViewModel.showStatus(backupSavedMessage)
-        else -> syncViewModel.showError(backupSaveFailedMessage)
+    if (uri == null) {
+        return
+    }
+    if (backupContent.isNullOrBlank()) {
+        syncViewModel.showError(context.getString(R.string.backup_save_requires_content))
+        return
+    }
+    if (writeBackupToUri(context, uri, backupContent)) {
+        syncViewModel.showStatus(backupSavedMessage)
+    } else {
+        syncViewModel.showError(backupSaveFailedMessage)
     }
 }
 
@@ -449,10 +526,9 @@ private fun writeBackupToUri(context: Context, uri: Uri, backupContent: String):
         }
     )
 
-private fun readBackupFromUri(context: Context, uri: Uri?): String? =
+private fun readBackupFromUri(context: Context, uri: Uri): String? =
     runCatching {
-        val targetUri = uri ?: error("uri unavailable")
-        context.contentResolver.openInputStream(targetUri)?.bufferedReader()?.use { reader ->
+        context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { reader ->
             reader.readText()
         } ?: error("input stream unavailable")
     }.fold(
@@ -462,6 +538,9 @@ private fun readBackupFromUri(context: Context, uri: Uri?): String? =
             null
         }
     )
+
+private fun formatTimestamp(timestamp: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+    .format(java.util.Date(timestamp))
 
 @Composable
 private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
@@ -485,23 +564,7 @@ private fun SectionDescription(text: String) {
 @Composable
 private fun PasswordField(value: String, label: String, onValueChange: (String) -> Unit) {
     OutlinedTextField(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
-        value = value,
-        onValueChange = onValueChange,
-        singleLine = true,
-        label = { Text(label) },
-        visualTransformation = PasswordVisualTransformation()
-    )
-}
-
-@Composable
-private fun SimpleField(value: String, label: String, onValueChange: (String) -> Unit) {
-    OutlinedTextField(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
         value = value,
         onValueChange = onValueChange,
         singleLine = true,
@@ -510,14 +573,12 @@ private fun SimpleField(value: String, label: String, onValueChange: (String) ->
 }
 
 @Composable
-private fun BackupSummaryCard(summaryText: String, modifier: Modifier = Modifier) {
-    SelectionContainer {
-        Text(
-            modifier = modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            text = summaryText,
-            style = MaterialTheme.typography.bodyMedium
-        )
-    }
+private fun SimpleField(value: String, label: String, onValueChange: (String) -> Unit) {
+    OutlinedTextField(
+        modifier = Modifier.fillMaxWidth(),
+        value = value,
+        onValueChange = onValueChange,
+        singleLine = true,
+        label = { Text(label) }
+    )
 }

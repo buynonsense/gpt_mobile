@@ -90,13 +90,13 @@ There are two local persistence mechanisms:
     - `data/datastore/SettingDataSourceImpl.kt`
     - Stores enabled providers, API URLs, tokens, model names, temperature/top-p, prompts, theme settings, streaming style, and WebDAV sync config
 
-3. **Encrypted backup / sync layer** for full backup and restore
+3. **Backup / sync layer** for full backup and restore
    - `data/sync/BackupRepositoryImpl.kt`
    - `data/sync/SyncRepositoryImpl.kt`
    - `data/sync/WebDavRepositoryImpl.kt`
    - `data/sync/PasswordCryptoHelper.kt`
    - Full backups include Room data + DataStore settings + API keys
-   - Backup payload is encrypted with a user-provided backup password
+   - Backup payload is exported as plain JSON without a backup password
    - WebDAV password is stored locally using Android Keystore-backed encryption
 
 `DatabaseModule.kt` wires Room and DAOs. `DataStoreModule.kt` wires the preferences store.
@@ -182,12 +182,14 @@ The app now has a dedicated sync screen under settings:
 
 The sync flow currently supports:
 
-- generating a full encrypted backup JSON from local data
+- generating a full backup JSON from local data without a backup password
 - saving that backup to a user-selected local file through Android SAF
 - importing a backup JSON from a user-selected local file through Android SAF
-- restoring imported backup content into local storage after password confirmation
+- restoring imported backup content into local storage without password confirmation
+- switching between local backup and WebDAV sync sections through top-level cards in `SyncScreen.kt`
+- editing WebDAV config through a dialog instead of inline fields in the main screen
 - listing WebDAV backups
-- uploading local encrypted backups to WebDAV
+- uploading local backup files to WebDAV
 - downloading a remote WebDAV backup into the restore area for manual confirmation
 
 Conflict handling is intentionally manual:
@@ -209,7 +211,13 @@ Notable current tests now include:
 - `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/PasswordCryptoHelperTest.kt`
 - `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/WebDavXmlParserTest.kt`
 - `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/model/BackupModelsTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/BackupRepositoryImplTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/SyncRepositoryImplTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/SyncErrorClassifierTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/sync/WebDavRepositoryImplErrorTest.kt`
+- `app/src/test/kotlin/dev/chungjungsoo/gptmobile/data/datastore/SettingDataSourceImplSyncStatusTest.kt`
 - `app/src/androidTest/kotlin/dev/chungjungsoo/gptmobile/presentation/ui/setting/SyncScreenTest.kt`
+- `app/src/androidTest/kotlin/dev/chungjungsoo/gptmobile/presentation/ui/setting/SyncViewModelStatusTest.kt`
 
 For sync-related changes, prefer running:
 

@@ -18,8 +18,7 @@ data class BackupFile(
     val appVersion: String,
     val backupType: String,
     val summary: BackupSummary,
-    val encryption: BackupEncryption,
-    val payload: String
+    val payload: BackupPayload
 )
 
 @Serializable
@@ -28,16 +27,6 @@ data class BackupSummary(
     val messageCount: Int,
     val aiMaskCount: Int,
     val containsSecrets: Boolean
-)
-
-@Serializable
-data class BackupEncryption(
-    val enabled: Boolean,
-    val algorithm: String,
-    val kdf: String,
-    val iterations: Int,
-    val salt: String,
-    val iv: String
 )
 
 @Serializable

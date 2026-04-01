@@ -86,8 +86,9 @@
 - 数据同步入口在设置页，核心 UI 位于 `presentation/ui/setting/SyncScreen.kt` 与 `SyncViewModel.kt`。
 - 同步数据层位于 `data/sync/`，核心实现包括：`BackupRepositoryImpl.kt`、`SyncRepositoryImpl.kt`、`WebDavRepositoryImpl.kt`、`PasswordCryptoHelper.kt`。
 - 全量备份范围包括 Room 中的聊天 / 消息 / 角色，以及 DataStore 中的设置与 API key。
-- 备份文件使用“用户输入的备份密码”加密；WebDAV 密码本地保存时使用 Android Keystore 加密。
+- 备份文件当前导出为无密码的明文 JSON；WebDAV 密码本地保存时使用 Android Keystore 加密。
 - 本地导入导出通过 Android SAF 实现；不要把文件读写逻辑塞进 ViewModel。
+- 同步页顶部使用“本地备份 / WebDAV 同步”双卡片切换；WebDAV 配置通过弹窗编辑，不在主体内容常驻。
 - 云同步首版只做全量备份，不做自动合并。
 - 检测到冲突时，必须保持手动决策：允许用户覆盖云端，或先下载云端备份到恢复区，再由用户确认是否恢复到本地。
 

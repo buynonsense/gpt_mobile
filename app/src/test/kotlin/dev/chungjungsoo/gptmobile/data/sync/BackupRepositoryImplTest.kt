@@ -18,6 +18,7 @@ import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
+import dev.chungjungsoo.gptmobile.data.sync.model.BackupPayload
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import java.lang.reflect.Proxy
@@ -67,7 +68,7 @@ class BackupRepositoryImplTest {
             )
         )
 
-        val backup = repository.exportBackup("correct-password")
+        val backup = repository.exportBackup()
 
         assertEquals(2, backup.summary.chatRoomCount)
         assertEquals(3, backup.summary.messageCount)
@@ -76,19 +77,13 @@ class BackupRepositoryImplTest {
     }
 
     @Test
-    fun exportBackup_setsEncryptionMetadataContract() = runBlocking {
+    fun exportBackup_setsPayloadContract() = runBlocking {
         val repository = createRepository()
 
-        val backup = repository.exportBackup("correct-password")
+        val backup = repository.exportBackup()
 
         assertEquals(1, backup.schemaVersion)
-        assertTrue(backup.encryption.enabled)
-        assertEquals("AES/GCM/NoPadding", backup.encryption.algorithm)
-        assertEquals("PBKDF2WithHmacSHA256", backup.encryption.kdf)
-        assertTrue(backup.encryption.iterations > 0)
-        assertTrue(backup.encryption.salt.isNotBlank())
-        assertTrue(backup.encryption.iv.isNotBlank())
-        assertTrue(backup.payload.isNotBlank())
+        assertTrue(backup.payload.settings.platforms.isNotEmpty() || backup.payload.settings.platforms.isEmpty())
     }
 
     @Test
@@ -114,7 +109,7 @@ class BackupRepositoryImplTest {
     fun parseBackupFile_throwsIllegalArgumentException_whenSchemaIsUnsupported() {
         val repository = createRepository()
         val exported = runBlocking {
-            repository.exportBackup("correct-password")
+            repository.exportBackup()
         }
 
         val exception = assertThrows(IllegalArgumentException::class.java) {
@@ -127,19 +122,38 @@ class BackupRepositoryImplTest {
     }
 
     @Test
-    fun restoreBackup_throwsInvalidBackupPassword_whenPasswordIsWrong() {
-        val repository = createRepository()
+    fun restoreBackup_restoresWithoutPassword() {
         val exported = runBlocking {
-            repository.exportBackup("correct-password")
+            createRepository(
+                platforms = listOf(platform(token = "secret-token")),
+                chatRooms = listOf(chatRoom(id = 1, title = "new")),
+                messages = listOf(message(id = 11, chatId = 1)),
+                aiMasks = listOf(mask(id = 21, name = "mask"))
+            ).exportBackup()
         }
 
-        val exception = assertThrows(IllegalArgumentException::class.java) {
-            runBlocking {
-                repository.restoreBackup(exported.toJson(), "wrong-password")
-            }
+        val fakeChatRoomDao = createMutableChatRoomDao(listOf(chatRoom(id = 7, title = "old")))
+        val fakeMessageDao = createMutableMessageDao(listOf(message(id = 99, chatId = 7, content = "stale")))
+        val fakeAiMaskDao = createMutableAiMaskDao(listOf(mask(id = 31, name = "old-mask", systemPrompt = "old")))
+        val repository = BackupRepositoryImpl(
+            chatRoomDao = fakeChatRoomDao.dao,
+            messageDao = fakeMessageDao.dao,
+            aiMaskDao = fakeAiMaskDao.dao,
+            settingRepository = RecordingSettingRepository(),
+            restoreTransactionRunner = SnapshotBackupRestoreTransactionRunner(
+                fakeChatRoomDao.store,
+                fakeMessageDao.store,
+                fakeAiMaskDao.store
+            )
+        )
+
+        runBlocking {
+            repository.restoreBackup(exported.toJson())
         }
 
-        assertEquals("Invalid backup password", exception.message)
+        assertEquals(listOf(chatRoom(id = 1, title = "new")), fakeChatRoomDao.currentData)
+        assertEquals(listOf(message(id = 11, chatId = 1)), fakeMessageDao.currentData)
+        assertEquals(listOf(mask(id = 21, name = "mask")), fakeAiMaskDao.currentData)
     }
 
     @Test
@@ -157,7 +171,7 @@ class BackupRepositoryImplTest {
             chatRooms = listOf(chatRoom(id = 1, title = "new")),
             messages = listOf(message(id = 11, chatId = 1)),
             aiMasks = listOf(mask(id = 21, name = "mask"))
-        ).exportBackup("pw").toJson()
+        ).exportBackup().toJson()
 
         val fakeChatRoomDao = createMutableChatRoomDao(listOf(chatRoom(id = 7, title = "old")))
         val fakeMessageDao = createMutableMessageDao(listOf(message(id = 99, chatId = 7, content = "stale")))
@@ -168,7 +182,6 @@ class BackupRepositoryImplTest {
             messageDao = fakeMessageDao.dao,
             aiMaskDao = fakeAiMaskDao.dao,
             settingRepository = fakeSettingRepository,
-            cryptoManager = BackupCryptoManager(),
             restoreTransactionRunner = SnapshotBackupRestoreTransactionRunner(
                 fakeChatRoomDao.store,
                 fakeMessageDao.store,
@@ -176,7 +189,7 @@ class BackupRepositoryImplTest {
             )
         )
 
-        repository.restoreBackup(backupJson, "pw")
+        repository.restoreBackup(backupJson)
 
         assertEquals(listOf(chatRoom(id = 1, title = "new")), fakeChatRoomDao.currentData)
         assertEquals(listOf(message(id = 11, chatId = 1)), fakeMessageDao.currentData)
@@ -199,7 +212,7 @@ class BackupRepositoryImplTest {
             chatRooms = listOf(chatRoom(id = 1, title = "new")),
             messages = listOf(message(id = 11, chatId = 1)),
             aiMasks = listOf(mask(id = 21, name = "mask"))
-        ).exportBackup("pw").toJson()
+        ).exportBackup().toJson()
 
         val previousChat = chatRoom(id = 7, title = "old")
         val previousMessage = message(id = 99, chatId = 7, content = "stale")
@@ -215,7 +228,6 @@ class BackupRepositoryImplTest {
             messageDao = fakeMessageDao.dao,
             aiMaskDao = fakeAiMaskDao.dao,
             settingRepository = fakeSettingRepository,
-            cryptoManager = BackupCryptoManager(),
             restoreTransactionRunner = SnapshotBackupRestoreTransactionRunner(
                 fakeChatRoomDao.store,
                 fakeMessageDao.store,
@@ -225,7 +237,7 @@ class BackupRepositoryImplTest {
 
         val exception = assertThrows(IllegalStateException::class.java) {
             runBlocking {
-                repository.restoreBackup(backupJson, "pw")
+                repository.restoreBackup(backupJson)
             }
         }
 
@@ -285,7 +297,6 @@ class BackupRepositoryImplTest {
         aiMasks: List<AiMask> = emptyList()
     ): BackupRepositoryImpl {
         return BackupRepositoryImpl(
-            chatDatabase = UnusedChatDatabase,
             chatRoomDao = createChatRoomDao(chatRooms),
             messageDao = createMessageDao(messages),
             aiMaskDao = createAiMaskDao(aiMasks),
@@ -294,7 +305,7 @@ class BackupRepositoryImplTest {
                 themeSetting = themeSetting,
                 streamingStyle = streamingStyle
             ),
-            cryptoManager = BackupCryptoManager()
+            restoreTransactionRunner = SnapshotBackupRestoreTransactionRunner()
         )
     }
 

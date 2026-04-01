@@ -6,8 +6,8 @@ import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavRemoteFile
 
 interface SyncRepository {
-    suspend fun exportBackupJson(password: String): String
-    suspend fun restoreBackupJson(content: String, password: String)
+    suspend fun exportBackupJson(): String
+    suspend fun restoreBackupJson(content: String)
     suspend fun parseBackup(content: String): BackupFile
     suspend fun testWebDavConnection(baseUrl: String, username: String, remotePath: String, password: String)
     suspend fun saveWebDavConfig(baseUrl: String, username: String, remotePath: String, password: String)

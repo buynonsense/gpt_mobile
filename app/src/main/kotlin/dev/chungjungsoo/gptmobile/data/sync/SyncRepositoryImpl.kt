@@ -20,13 +20,13 @@ class SyncRepositoryImpl @Inject constructor(
     private val cryptoManager: BackupCryptoManager
 ) : SyncRepository {
 
-    override suspend fun exportBackupJson(password: String): String {
-        val backup = backupRepository.exportBackup(password)
+    override suspend fun exportBackupJson(): String {
+        val backup = backupRepository.exportBackup()
         return json.encodeToString(BackupFile.serializer(), backup)
     }
 
-    override suspend fun restoreBackupJson(content: String, password: String) {
-        backupRepository.restoreBackup(content, password)
+    override suspend fun restoreBackupJson(content: String) {
+        backupRepository.restoreBackup(content)
     }
 
     override suspend fun parseBackup(content: String): BackupFile = backupRepository.parseBackupFile(content)
@@ -76,7 +76,7 @@ class SyncRepositoryImpl @Inject constructor(
 
     override suspend fun detectUploadConflict(password: String): SyncConflict? {
         val config = requireWebDavConfig()
-        val localBackupContent = exportBackupJson(password)
+        val localBackupContent = exportBackupJson()
         val localBackup = parseBackup(localBackupContent)
         val remoteFile = webDavRepository.listBackupFiles(config, password)
             .sortedByDescending { it.modifiedAt ?: it.name }
@@ -105,7 +105,7 @@ class SyncRepositoryImpl @Inject constructor(
             }
         }
 
-        val content = exportBackupJson(password)
+        val content = exportBackupJson()
         val fileName = buildBackupFileName()
         webDavRepository.uploadBackup(config, password, fileName, content)
         return fileName
