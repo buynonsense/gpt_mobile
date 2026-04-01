@@ -6,9 +6,17 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.chungjungsoo.gptmobile.R
+import dev.chungjungsoo.gptmobile.data.dto.Platform
+import dev.chungjungsoo.gptmobile.data.dto.ThemeSetting
+import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
+import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
+import dev.chungjungsoo.gptmobile.data.sync.SyncErrorClassifier
 import dev.chungjungsoo.gptmobile.data.sync.SyncRepository
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncErrorCategory
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncConflict
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncOperation
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavRemoteFile
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +28,7 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class SyncViewModel @Inject constructor(
     private val syncRepository: SyncRepository,
+    private val settingRepository: SettingRepository = NoOpSettingRepository,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
@@ -38,7 +47,8 @@ class SyncViewModel @Inject constructor(
         val importedBackupJson: String? = null,
         val importedBackupSummary: BackupFile? = null,
         val remoteBackups: List<WebDavRemoteFile> = emptyList(),
-        val uploadConflict: SyncConflict? = null
+        val uploadConflict: SyncConflict? = null,
+        val syncStatusSnapshot: SyncStatusSnapshot? = null
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -48,12 +58,14 @@ class SyncViewModel @Inject constructor(
         viewModelScope.launch {
             val config = syncRepository.getWebDavConfig()
             val password = syncRepository.getWebDavPassword()
+            val snapshot = settingRepository.fetchSyncStatusSnapshot()
             _uiState.update {
                 it.copy(
                     webDavBaseUrl = config?.baseUrl.orEmpty(),
                     webDavUsername = config?.username.orEmpty(),
                     webDavRemotePath = config?.remotePath.orEmpty(),
-                    webDavPassword = password.orEmpty()
+                    webDavPassword = password.orEmpty(),
+                    syncStatusSnapshot = snapshot
                 )
             }
         }
@@ -94,19 +106,23 @@ class SyncViewModel @Inject constructor(
     fun exportBackup() {
         val password = _uiState.value.backupPassword
         if (password.isBlank()) {
-            showError(R.string.backup_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.LOCAL_EXPORT,
+                validationFailure = SyncErrorCategory.BACKUP_PASSWORD_INVALID
+            )
             return
         }
 
         launchSafely(action = {
             val content = syncRepository.exportBackupJson(password)
+            recordOperationSuccess(SyncOperation.LOCAL_EXPORT)
             showStatus(R.string.backup_generated)
             _uiState.update {
                 it.copy(
                     localBackupJson = content
                 )
             }
-        }, fallbackErrorResId = R.string.backup_export_failed)
+        }, operation = SyncOperation.LOCAL_EXPORT, fallbackErrorResId = R.string.backup_export_failed)
     }
 
     fun restoreImportedBackup() {
@@ -117,14 +133,18 @@ class SyncViewModel @Inject constructor(
             return
         }
         if (password.isBlank()) {
-            showError(R.string.restore_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.LOCAL_RESTORE,
+                validationFailure = SyncErrorCategory.BACKUP_PASSWORD_INVALID
+            )
             return
         }
 
         launchSafely(action = {
             syncRepository.restoreBackupJson(content, password)
+            recordOperationSuccess(SyncOperation.LOCAL_RESTORE)
             showStatus(R.string.backup_restored)
-        }, fallbackErrorResId = R.string.backup_restore_failed)
+        }, operation = SyncOperation.LOCAL_RESTORE, fallbackErrorResId = R.string.backup_restore_failed)
     }
 
     fun saveWebDavConfig() {
@@ -148,7 +168,10 @@ class SyncViewModel @Inject constructor(
     fun testWebDavConnection() {
         val state = _uiState.value
         if (state.webDavBaseUrl.isBlank() || state.webDavUsername.isBlank() || state.webDavPassword.isBlank()) {
-            showError(R.string.webdav_config_required)
+            handleValidationFailure(
+                operation = SyncOperation.CONNECTION_TEST,
+                validationFailure = SyncErrorCategory.WEBDAV_CONFIG_INVALID
+            )
             return
         }
 
@@ -159,8 +182,9 @@ class SyncViewModel @Inject constructor(
                 remotePath = state.webDavRemotePath,
                 password = state.webDavPassword
             )
+            recordOperationSuccess(SyncOperation.CONNECTION_TEST)
             showStatus(R.string.webdav_connection_success)
-        })
+        }, operation = SyncOperation.CONNECTION_TEST)
     }
 
     fun loadRemoteBackups() {
@@ -185,11 +209,17 @@ class SyncViewModel @Inject constructor(
     fun uploadBackup(overwrite: Boolean = false) {
         val state = _uiState.value
         if (state.backupPassword.isBlank()) {
-            showError(R.string.backup_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.CLOUD_UPLOAD,
+                validationFailure = SyncErrorCategory.BACKUP_PASSWORD_INVALID
+            )
             return
         }
         if (state.webDavPassword.isBlank()) {
-            showError(R.string.webdav_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.CLOUD_UPLOAD,
+                validationFailure = SyncErrorCategory.WEBDAV_CONFIG_INVALID
+            )
             return
         }
 
@@ -208,6 +238,10 @@ class SyncViewModel @Inject constructor(
                 overwrite = overwrite
             )
             val remoteFiles = syncRepository.listRemoteBackups(state.webDavPassword)
+            recordOperationSuccess(
+                operation = SyncOperation.CLOUD_UPLOAD,
+                remoteFileName = fileName
+            )
             showStatus(R.string.backup_uploaded, fileName)
             _uiState.update {
                 it.copy(
@@ -216,13 +250,16 @@ class SyncViewModel @Inject constructor(
                     selectedRemoteFile = fileName
                 )
             }
-        })
+        }, operation = SyncOperation.CLOUD_UPLOAD)
     }
 
     fun downloadSelectedRemoteBackup() {
         val state = _uiState.value
         if (state.webDavPassword.isBlank()) {
-            showError(R.string.webdav_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.CLOUD_DOWNLOAD,
+                validationFailure = SyncErrorCategory.WEBDAV_CONFIG_INVALID
+            )
             return
         }
         if (state.selectedRemoteFile.isBlank()) {
@@ -233,6 +270,10 @@ class SyncViewModel @Inject constructor(
         launchSafely(action = {
             val content = syncRepository.downloadRemoteBackup(state.webDavPassword, state.selectedRemoteFile)
             val summary = syncRepository.parseBackup(content)
+            recordOperationSuccess(
+                operation = SyncOperation.CLOUD_DOWNLOAD,
+                remoteFileName = state.selectedRemoteFile
+            )
             showStatus(R.string.backup_downloaded)
             _uiState.update {
                 it.copy(
@@ -240,7 +281,7 @@ class SyncViewModel @Inject constructor(
                     importedBackupSummary = summary
                 )
             }
-        })
+        }, operation = SyncOperation.CLOUD_DOWNLOAD)
     }
 
     fun clearMessages() {
@@ -276,13 +317,20 @@ class SyncViewModel @Inject constructor(
 
         val password = _uiState.value.webDavPassword
         if (password.isBlank()) {
-            showError(R.string.webdav_password_required)
+            handleValidationFailure(
+                operation = SyncOperation.CONFLICT_LOAD_REMOTE,
+                validationFailure = SyncErrorCategory.WEBDAV_CONFIG_INVALID
+            )
             return
         }
 
         launchSafely(action = {
             val content = syncRepository.downloadRemoteBackup(password, conflict.remoteFileName)
             val summary = syncRepository.parseBackup(content)
+            recordOperationSuccess(
+                operation = SyncOperation.CONFLICT_LOAD_REMOTE,
+                remoteFileName = conflict.remoteFileName
+            )
             showStatus(R.string.conflict_remote_backup_loaded)
             _uiState.update {
                 it.copy(
@@ -292,17 +340,204 @@ class SyncViewModel @Inject constructor(
                     uploadConflict = null
                 )
             }
-        }, fallbackErrorResId = R.string.backup_download_failed)
+        }, operation = SyncOperation.CONFLICT_LOAD_REMOTE, fallbackErrorResId = R.string.backup_download_failed)
     }
 
-    private fun launchSafely(action: suspend () -> Unit, fallbackErrorResId: Int = R.string.unknown_sync_error) {
+    private fun launchSafely(
+        action: suspend () -> Unit,
+        operation: SyncOperation? = null,
+        fallbackErrorResId: Int = R.string.unknown_sync_error
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(isBusy = true, errorMessage = null, statusMessage = null) }
             runCatching { action() }
                 .onFailure { error ->
-                    showError(error.message ?: appContext.getString(fallbackErrorResId))
+                    if (operation == null) {
+                        showError(nonSyncErrorMessage(error, fallbackErrorResId))
+                    } else {
+                        recordOperationFailure(operation, error)
+                    }
                 }
             _uiState.update { it.copy(isBusy = false) }
+        }
+    }
+
+    private fun handleValidationFailure(operation: SyncOperation, validationFailure: SyncErrorCategory) {
+        val category = SyncErrorClassifier.classifyValidationFailure(operation, validationFailure)
+        val snapshot = buildFailureSnapshot(
+            previous = _uiState.value.syncStatusSnapshot,
+            operation = operation,
+            category = category,
+            recordedAt = System.currentTimeMillis()
+        )
+        showError(stableErrorMessage(category))
+        _uiState.update { it.copy(syncStatusSnapshot = snapshot) }
+        viewModelScope.launch {
+            settingRepository.updateSyncStatusSnapshot(snapshot)
+        }
+    }
+
+    private suspend fun recordOperationSuccess(operation: SyncOperation, remoteFileName: String? = null) {
+        val snapshot = buildSuccessSnapshot(
+            previous = _uiState.value.syncStatusSnapshot,
+            operation = operation,
+            recordedAt = System.currentTimeMillis(),
+            remoteFileName = remoteFileName
+        )
+        persistSnapshot(snapshot)
+    }
+
+    private suspend fun recordOperationFailure(operation: SyncOperation, error: Throwable) {
+        val category = classifySyncOperationError(operation, error)
+        val snapshot = buildFailureSnapshot(
+            previous = _uiState.value.syncStatusSnapshot,
+            operation = operation,
+            category = category,
+            recordedAt = System.currentTimeMillis()
+        )
+        persistSnapshot(snapshot)
+        showError(stableErrorMessage(category))
+    }
+
+    private suspend fun persistSnapshot(snapshot: SyncStatusSnapshot) {
+        settingRepository.updateSyncStatusSnapshot(snapshot)
+        _uiState.update { it.copy(syncStatusSnapshot = snapshot) }
+    }
+
+    private fun nonSyncErrorMessage(error: Throwable, fallbackErrorResId: Int): String {
+        return error.message ?: appContext.getString(fallbackErrorResId)
+    }
+
+    private fun classifySyncOperationError(operation: SyncOperation, error: Throwable): SyncErrorCategory {
+        if (operation in WEBDAV_CONFIG_REQUIRED_OPERATIONS && error.message == MISSING_WEBDAV_CONFIG_MESSAGE) {
+            return SyncErrorCategory.WEBDAV_CONFIG_INVALID
+        }
+        return SyncErrorClassifier.classifyThrowable(error)
+    }
+
+    private fun buildSuccessSnapshot(
+        previous: SyncStatusSnapshot?,
+        operation: SyncOperation,
+        recordedAt: Long,
+        remoteFileName: String? = null
+    ): SyncStatusSnapshot {
+        val baseSnapshot = previous ?: SyncStatusSnapshot()
+        return when (operation) {
+            SyncOperation.LOCAL_EXPORT -> baseSnapshot.copy(
+                lastLocalExportAt = recordedAt,
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = true,
+                lastErrorCategory = null
+            )
+
+            SyncOperation.LOCAL_RESTORE -> baseSnapshot.copy(
+                lastLocalRestoreAt = recordedAt,
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = true,
+                lastErrorCategory = null
+            )
+
+            SyncOperation.CONNECTION_TEST -> baseSnapshot.copy(
+                lastConnectionTestAt = recordedAt,
+                lastConnectionTestSuccess = true,
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = true,
+                lastErrorCategory = null
+            )
+
+            SyncOperation.CLOUD_UPLOAD -> baseSnapshot.copy(
+                lastCloudUploadAt = recordedAt,
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = true,
+                lastErrorCategory = null,
+                lastRemoteFileName = remoteFileName ?: baseSnapshot.lastRemoteFileName
+            )
+
+            SyncOperation.CLOUD_DOWNLOAD,
+            SyncOperation.CONFLICT_LOAD_REMOTE -> baseSnapshot.copy(
+                lastCloudDownloadAt = recordedAt,
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = true,
+                lastErrorCategory = null,
+                lastRemoteFileName = remoteFileName ?: baseSnapshot.lastRemoteFileName
+            )
+        }
+    }
+
+    private fun buildFailureSnapshot(
+        previous: SyncStatusSnapshot?,
+        operation: SyncOperation,
+        category: SyncErrorCategory,
+        recordedAt: Long
+    ): SyncStatusSnapshot {
+        val baseSnapshot = previous ?: SyncStatusSnapshot()
+        return when (operation) {
+            SyncOperation.CONNECTION_TEST -> baseSnapshot.copy(
+                lastConnectionTestAt = recordedAt,
+                lastConnectionTestSuccess = false,
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = false,
+                lastErrorCategory = category
+            )
+
+            else -> baseSnapshot.copy(
+                lastOperation = operation,
+                lastOperationAt = recordedAt,
+                lastOperationSuccess = false,
+                lastErrorCategory = category
+            )
+        }
+    }
+
+    private fun stableErrorMessage(category: SyncErrorCategory): String {
+        val messageResId = when (category) {
+            SyncErrorCategory.BACKUP_PASSWORD_INVALID -> R.string.sync_error_backup_password_invalid
+            SyncErrorCategory.BACKUP_FILE_INVALID -> R.string.sync_error_backup_file_invalid
+            SyncErrorCategory.BACKUP_SCHEMA_UNSUPPORTED -> R.string.sync_error_backup_schema_unsupported
+            SyncErrorCategory.WEBDAV_CONFIG_INVALID -> R.string.sync_error_webdav_config_invalid
+            SyncErrorCategory.WEBDAV_AUTH_FAILED -> R.string.sync_error_webdav_auth_failed
+            SyncErrorCategory.WEBDAV_NETWORK_ERROR -> R.string.sync_error_webdav_network_error
+            SyncErrorCategory.WEBDAV_SERVER_ERROR -> R.string.sync_error_webdav_server_error
+            SyncErrorCategory.UNKNOWN -> R.string.sync_error_unknown
+        }
+        return appContext.getString(messageResId)
+    }
+
+    private companion object {
+        val WEBDAV_CONFIG_REQUIRED_OPERATIONS = setOf(
+            SyncOperation.CLOUD_UPLOAD,
+            SyncOperation.CLOUD_DOWNLOAD,
+            SyncOperation.CONFLICT_LOAD_REMOTE
+        )
+
+        const val MISSING_WEBDAV_CONFIG_MESSAGE = "WebDAV config is not set"
+
+        val NoOpSettingRepository = object : SettingRepository {
+            override suspend fun fetchPlatforms(): List<Platform> = emptyList()
+
+            override suspend fun fetchThemes(): ThemeSetting = ThemeSetting()
+
+            override suspend fun fetchStreamingStyle(): StreamingStyle = StreamingStyle.TYPEWRITER
+
+            override suspend fun fetchWebDavConfig() = null
+
+            override suspend fun fetchSyncStatusSnapshot(): SyncStatusSnapshot? = null
+
+            override suspend fun updatePlatforms(platforms: List<Platform>) = Unit
+
+            override suspend fun updateThemes(themeSetting: ThemeSetting) = Unit
+
+            override suspend fun updateStreamingStyle(style: StreamingStyle) = Unit
+
+            override suspend fun updateWebDavConfig(config: dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig?) = Unit
+
+            override suspend fun updateSyncStatusSnapshot(snapshot: SyncStatusSnapshot?) = Unit
         }
     }
 }

@@ -11,6 +11,7 @@ import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import javax.inject.Inject
 import kotlinx.coroutines.flow.first
@@ -73,6 +74,7 @@ class SettingDataSourceImpl @Inject constructor(
     private val themeModeKey = intPreferencesKey("theme_mode")
     private val streamingStyleKey = intPreferencesKey("streaming_style")
     private val webDavConfigKey = stringPreferencesKey("webdav_config")
+    private val syncStatusSnapshotKey = stringPreferencesKey("sync_status_snapshot")
 
     override suspend fun updateDynamicTheme(theme: DynamicTheme) {
         dataStore.edit { pref ->
@@ -169,6 +171,16 @@ class SettingDataSourceImpl @Inject constructor(
         }
     }
 
+    override suspend fun updateSyncStatusSnapshot(snapshot: SyncStatusSnapshot?) {
+        dataStore.edit { pref ->
+            if (snapshot == null) {
+                pref.remove(syncStatusSnapshotKey)
+            } else {
+                pref[syncStatusSnapshotKey] = json.encodeToString(SyncStatusSnapshot.serializer(), snapshot)
+            }
+        }
+    }
+
     override suspend fun getDynamicTheme(): DynamicTheme? {
         val mode = dataStore.data.map { pref ->
             pref[dynamicThemeKey]
@@ -224,6 +236,10 @@ class SettingDataSourceImpl @Inject constructor(
     override suspend fun getWebDavConfig(): WebDavConfig? = dataStore.data.map { pref ->
         pref[webDavConfigKey]
     }.first()?.let { json.decodeFromString(WebDavConfig.serializer(), it) }
+
+    override suspend fun getSyncStatusSnapshot(): SyncStatusSnapshot? = dataStore.data.map { pref ->
+        pref[syncStatusSnapshotKey]
+    }.first()?.let { json.decodeFromString(SyncStatusSnapshot.serializer(), it) }
 
     private val json = Json { ignoreUnknownKeys = true }
 }

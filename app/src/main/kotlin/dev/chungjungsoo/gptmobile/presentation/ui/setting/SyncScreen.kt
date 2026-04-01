@@ -49,6 +49,7 @@ private const val SYNC_SCREEN_LOG_TAG = "SyncScreen"
 internal const val SAVE_BACKUP_TO_FILE_BUTTON_TAG = "save_backup_to_file_button"
 internal const val IMPORT_BACKUP_FROM_FILE_BUTTON_TAG = "import_backup_from_file_button"
 internal const val SYNC_ERROR_MESSAGE_TAG = "sync_error_message"
+internal const val SYNC_WEBDAV_SECTION_TITLE_TAG = "sync_webdav_section_title"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -240,7 +241,16 @@ fun SyncScreen(
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp))
 
-            SectionTitle(stringResource(R.string.webdav_sync))
+            SectionTitle(stringResource(R.string.sync_status_title))
+            SectionDescription(stringResource(R.string.sync_status_description))
+            SyncStatusCard(snapshot = uiState.syncStatusSnapshot)
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 20.dp, horizontal = 16.dp))
+
+            SectionTitle(
+                text = stringResource(R.string.webdav_sync),
+                modifier = Modifier.testTag(SYNC_WEBDAV_SECTION_TITLE_TAG)
+            )
             SectionDescription(stringResource(R.string.webdav_sync_description))
             SimpleField(
                 value = uiState.webDavBaseUrl,
@@ -454,9 +464,9 @@ private fun readBackupFromUri(context: Context, uri: Uri?): String? =
     )
 
 @Composable
-private fun SectionTitle(text: String) {
+private fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+        modifier = modifier.padding(horizontal = 20.dp, vertical = 8.dp),
         text = text,
         style = MaterialTheme.typography.titleLarge
     )

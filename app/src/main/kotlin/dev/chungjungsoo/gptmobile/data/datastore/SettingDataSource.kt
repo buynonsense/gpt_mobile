@@ -4,6 +4,7 @@ import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 
@@ -19,6 +20,7 @@ interface SettingDataSource {
     suspend fun updateTopP(apiType: ApiType, topP: Float?)
     suspend fun updateSystemPrompt(apiType: ApiType, prompt: String?)
     suspend fun updateWebDavConfig(config: WebDavConfig?)
+    suspend fun updateSyncStatusSnapshot(snapshot: SyncStatusSnapshot?)
     suspend fun getDynamicTheme(): DynamicTheme?
     suspend fun getThemeMode(): ThemeMode?
     suspend fun getStreamingStyle(): StreamingStyle?
@@ -30,4 +32,5 @@ interface SettingDataSource {
     suspend fun getTopP(apiType: ApiType): Float?
     suspend fun getSystemPrompt(apiType: ApiType): String?
     suspend fun getWebDavConfig(): WebDavConfig?
+    suspend fun getSyncStatusSnapshot(): SyncStatusSnapshot?
 }

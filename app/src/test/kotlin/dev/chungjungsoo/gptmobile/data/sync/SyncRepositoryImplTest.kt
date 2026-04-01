@@ -8,6 +8,7 @@ import dev.chungjungsoo.gptmobile.data.sync.model.BackupEncryption
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupSummary
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncConflict
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavRemoteFile
 import kotlinx.coroutines.runBlocking
@@ -421,6 +422,10 @@ class SyncRepositoryImplTest {
 
         override suspend fun fetchWebDavConfig(): WebDavConfig? = savedConfig
 
+        override suspend fun fetchSyncStatusSnapshot(): SyncStatusSnapshot? {
+            throw UnsupportedOperationException("fetchSyncStatusSnapshot is not used in this test")
+        }
+
         override suspend fun updatePlatforms(platforms: List<Platform>) {
             throw UnsupportedOperationException("updatePlatforms is not used in this test")
         }
@@ -435,6 +440,10 @@ class SyncRepositoryImplTest {
 
         override suspend fun updateWebDavConfig(config: WebDavConfig?) {
             savedConfig = config
+        }
+
+        override suspend fun updateSyncStatusSnapshot(snapshot: SyncStatusSnapshot?) {
+            throw UnsupportedOperationException("updateSyncStatusSnapshot is not used in this test")
         }
     }
 

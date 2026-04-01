@@ -18,6 +18,7 @@ import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
 import dev.chungjungsoo.gptmobile.data.repository.SettingRepository
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.runBlocking
@@ -445,6 +446,8 @@ class BackupRepositoryImplTest {
 
         override suspend fun fetchWebDavConfig(): WebDavConfig? = null
 
+        override suspend fun fetchSyncStatusSnapshot(): SyncStatusSnapshot? = null
+
         override suspend fun updatePlatforms(platforms: List<Platform>) {
             updatedPlatforms = platforms
         }
@@ -461,6 +464,8 @@ class BackupRepositoryImplTest {
         }
 
         override suspend fun updateWebDavConfig(config: WebDavConfig?) = Unit
+
+        override suspend fun updateSyncStatusSnapshot(snapshot: SyncStatusSnapshot?) = Unit
     }
 
     private class MutableEntityStore<T>(initialData: List<T>) {

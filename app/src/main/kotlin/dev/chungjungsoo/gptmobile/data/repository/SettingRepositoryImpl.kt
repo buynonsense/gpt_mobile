@@ -8,6 +8,7 @@ import dev.chungjungsoo.gptmobile.data.model.ApiType
 import dev.chungjungsoo.gptmobile.data.model.DynamicTheme
 import dev.chungjungsoo.gptmobile.data.model.StreamingStyle
 import dev.chungjungsoo.gptmobile.data.model.ThemeMode
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import javax.inject.Inject
 
@@ -58,6 +59,8 @@ class SettingRepositoryImpl @Inject constructor(
 
     override suspend fun fetchWebDavConfig(): WebDavConfig? = settingDataSource.getWebDavConfig()
 
+    override suspend fun fetchSyncStatusSnapshot(): SyncStatusSnapshot? = settingDataSource.getSyncStatusSnapshot()
+
     override suspend fun updatePlatforms(platforms: List<Platform>) {
         platforms.forEach { platform ->
             settingDataSource.updateStatus(platform.name, platform.enabled)
@@ -81,5 +84,9 @@ class SettingRepositoryImpl @Inject constructor(
 
     override suspend fun updateWebDavConfig(config: WebDavConfig?) {
         settingDataSource.updateWebDavConfig(config)
+    }
+
+    override suspend fun updateSyncStatusSnapshot(snapshot: SyncStatusSnapshot?) {
+        settingDataSource.updateSyncStatusSnapshot(snapshot)
     }
 }

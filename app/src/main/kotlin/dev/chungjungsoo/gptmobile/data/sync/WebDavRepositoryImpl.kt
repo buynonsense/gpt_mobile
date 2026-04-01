@@ -1,9 +1,14 @@
 package dev.chungjungsoo.gptmobile.data.sync
 
 import android.util.Log
+import dev.chungjungsoo.gptmobile.data.sync.model.SyncErrorCategory
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavRemoteFile
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.ClientRequestException
+import io.ktor.client.plugins.RedirectResponseException
+import io.ktor.client.plugins.ServerResponseException
+import io.ktor.client.plugins.expectSuccess
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.put
@@ -17,6 +22,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.util.encodeBase64
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,16 +39,18 @@ class WebDavRepositoryImpl @Inject constructor(
 
     override suspend fun listBackupFiles(config: WebDavConfig, password: String): List<WebDavRemoteFile> {
         ensureDirectory(config, password)
-        val response = client.request(buildPath(config)) {
-            method = HttpMethod("PROPFIND")
-            header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
-            header("Depth", "1")
-            header(HttpHeaders.ContentType, "application/xml; charset=utf-8")
-            setBody(PROPFIND_BODY)
+        val response = executeRequest {
+            client.request(buildPath(config)) {
+                method = HttpMethod("PROPFIND")
+                header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+                header("Depth", "1")
+                header(HttpHeaders.ContentType, "application/xml; charset=utf-8")
+                setBody(PROPFIND_BODY)
+            }
         }
 
         if (!response.status.isSuccess()) {
-            throw IllegalStateException("Failed to list WebDAV files: ${response.status}")
+            throw toSyncOperationException(response.status)
         }
 
         val xml = response.bodyAsText()
@@ -52,14 +60,16 @@ class WebDavRepositoryImpl @Inject constructor(
 
     override suspend fun uploadBackup(config: WebDavConfig, password: String, fileName: String, content: String) {
         ensureDirectory(config, password)
-        val response = client.put(buildFilePath(config, fileName)) {
-            header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
-            contentType(ContentType.Application.Json)
-            setBody(content)
+        val response = executeRequest {
+            client.put(buildFilePath(config, fileName)) {
+                header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+                contentType(ContentType.Application.Json)
+                setBody(content)
+            }
         }
 
         if (response.status != HttpStatusCode.Created && response.status != HttpStatusCode.NoContent && !response.status.isSuccess()) {
-            throw IllegalStateException("Failed to upload backup: ${response.status}")
+            throw toSyncOperationException(response.status)
         }
     }
 
@@ -69,12 +79,14 @@ class WebDavRepositoryImpl @Inject constructor(
         } else {
             buildFilePath(config, remotePath.trimStart('/').substringAfterLast('/'))
         }
-        val response = client.get(target) {
-            header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+        val response = executeRequest {
+            client.get(target) {
+                header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+            }
         }
 
         if (!response.status.isSuccess()) {
-            throw IllegalStateException("Failed to download backup: ${response.status}")
+            throw toSyncOperationException(response.status)
         }
 
         return response.bodyAsText()
@@ -82,27 +94,47 @@ class WebDavRepositoryImpl @Inject constructor(
 
     private suspend fun ensureDirectory(config: WebDavConfig, password: String) {
         val path = buildPath(config)
-        val propfindResponse = client.request(path) {
-            method = HttpMethod("PROPFIND")
-            header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
-            header("Depth", "0")
-            header(HttpHeaders.ContentType, "application/xml; charset=utf-8")
-            setBody(PROPFIND_BODY)
+        val propfindResponse = executeRequest {
+            client.request(path) {
+                expectSuccess = false
+                method = HttpMethod("PROPFIND")
+                header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+                header("Depth", "0")
+                header(HttpHeaders.ContentType, "application/xml; charset=utf-8")
+                setBody(PROPFIND_BODY)
+            }
         }
         if (propfindResponse.status == HttpStatusCode.NotFound) {
-            val createResponse = client.request(path) {
-                method = HttpMethod("MKCOL")
-                header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+            val createResponse = executeRequest {
+                client.request(path) {
+                    expectSuccess = false
+                    method = HttpMethod("MKCOL")
+                    header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+                }
             }
             if (createResponse.status != HttpStatusCode.Created && createResponse.status != HttpStatusCode.MethodNotAllowed) {
-                throw IllegalStateException("Failed to create WebDAV directory: ${createResponse.status}")
+                throw toSyncOperationException(createResponse.status)
             }
             return
         }
 
         if (!propfindResponse.status.isSuccess() && propfindResponse.status != HttpStatusCode.MultiStatus) {
             Log.e("WebDavRepository", "WebDAV PROPFIND failed with status=${propfindResponse.status}")
-            throw IllegalStateException("Failed to access WebDAV directory: ${propfindResponse.status}")
+            throw toSyncOperationException(propfindResponse.status)
+        }
+    }
+
+    private suspend fun <T> executeRequest(block: suspend () -> T): T {
+        return try {
+            block()
+        } catch (exception: RedirectResponseException) {
+            throw toSyncOperationException(exception)
+        } catch (exception: ClientRequestException) {
+            throw toSyncOperationException(exception)
+        } catch (exception: ServerResponseException) {
+            throw toSyncOperationException(exception)
+        } catch (exception: IOException) {
+            throw toSyncOperationException(exception)
         }
     }
 
@@ -125,6 +157,28 @@ class WebDavRepositoryImpl @Inject constructor(
     }
 
     companion object {
+        internal fun toSyncOperationException(status: HttpStatusCode): SyncOperationException {
+            val category = when (status) {
+                HttpStatusCode.Unauthorized,
+                HttpStatusCode.Forbidden -> SyncErrorCategory.WEBDAV_AUTH_FAILED
+
+                else -> SyncErrorCategory.WEBDAV_SERVER_ERROR
+            }
+
+            return SyncOperationException(category)
+        }
+
+        internal fun toSyncOperationException(throwable: Throwable): SyncOperationException {
+            return when (throwable) {
+                is SyncOperationException -> throwable
+                is RedirectResponseException -> toSyncOperationException(throwable.response.status)
+                is ClientRequestException -> toSyncOperationException(throwable.response.status)
+                is ServerResponseException -> toSyncOperationException(throwable.response.status)
+                is IOException -> SyncOperationException(SyncErrorCategory.WEBDAV_NETWORK_ERROR, throwable)
+                else -> SyncOperationException(SyncErrorCategory.WEBDAV_SERVER_ERROR, throwable)
+            }
+        }
+
         private const val BACKUP_EXTENSION = ".json"
         private const val PROPFIND_BODY = """
             <?xml version="1.0" encoding="utf-8" ?>
