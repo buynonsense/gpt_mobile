@@ -1,20 +1,46 @@
 package dev.chungjungsoo.gptmobile.data.repository
 
+import dev.chungjungsoo.gptmobile.data.database.ChatDatabase
+import dev.chungjungsoo.gptmobile.data.database.DatabaseTransactionRunner
+import dev.chungjungsoo.gptmobile.data.database.RoomDatabaseTransactionRunner
 import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
 import dev.chungjungsoo.gptmobile.data.database.entity.AiMask
 import dev.chungjungsoo.gptmobile.data.model.RoleDefaults
 import dev.chungjungsoo.gptmobile.data.model.RoleGroup
 import javax.inject.Inject
+import javax.inject.Singleton
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
-class AiMaskRepositoryImpl @Inject constructor(
+@Singleton
+class AiMaskRepositoryImpl internal constructor(
     private val aiMaskDao: AiMaskDao,
-    private val chatRoomDao: ChatRoomDao
+    private val chatRoomDao: ChatRoomDao,
+    private val transactionRunner: DatabaseTransactionRunner
 ) : AiMaskRepository {
+    private val defaultRoleMutex = Mutex()
 
-    override suspend fun fetchAll(): List<AiMask> = aiMaskDao.getAll()
+    @Inject
+    constructor(
+        chatDatabase: ChatDatabase,
+        aiMaskDao: AiMaskDao,
+        chatRoomDao: ChatRoomDao
+    ) : this(
+        aiMaskDao = aiMaskDao,
+        chatRoomDao = chatRoomDao,
+        transactionRunner = RoomDatabaseTransactionRunner(chatDatabase)
+    )
 
-    override suspend fun fetchArchived(): List<AiMask> = aiMaskDao.getArchived()
+    override suspend fun fetchAll(): List<AiMask> {
+        fetchDefault()
+        return aiMaskDao.getAll()
+    }
+
+    override suspend fun fetchArchived(): List<AiMask> {
+        fetchDefault()
+        return aiMaskDao.getArchived()
+    }
 
     override suspend fun fetchGroupedActive(): List<RoleGroup> {
         return aiMaskDao.getActiveGroupNames().map { groupName ->
@@ -30,17 +56,21 @@ class AiMaskRepositoryImpl @Inject constructor(
     override suspend fun fetchById(id: Int): AiMask? = aiMaskDao.getById(id)
 
     override suspend fun fetchDefault(): AiMask {
-        aiMaskDao.getDefault()?.let { return it }
+        return defaultRoleMutex.withLock {
+            cleanupDuplicateDefaults(aiMaskDao.getDefaults())?.let { return@withLock it }
 
-        val defaultRole = AiMask(
-            name = RoleDefaults.DEFAULT_ROLE_NAME,
-            systemPrompt = "",
-            groupName = RoleDefaults.DEFAULT_ROLE_GROUP,
-            isDefault = true,
-            isArchived = false
-        )
-        val insertedId = aiMaskDao.insert(defaultRole).toInt()
-        return defaultRole.copy(id = insertedId)
+            val now = System.currentTimeMillis() / 1000
+            aiMaskDao.insertDefaultIfMissing(
+                name = RoleDefaults.DEFAULT_ROLE_NAME,
+                systemPrompt = "",
+                groupName = RoleDefaults.DEFAULT_ROLE_GROUP,
+                updatedAt = now,
+                lastUsedAt = 0
+            )
+
+            cleanupDuplicateDefaults(aiMaskDao.getDefaults())
+                ?: error("默认角色创建失败")
+        }
     }
 
     override suspend fun upsert(name: String, systemPrompt: String, groupName: String, id: Int?): AiMask {
@@ -91,5 +121,17 @@ class AiMaskRepositoryImpl @Inject constructor(
 
     override suspend fun touch(id: Int) {
         aiMaskDao.touch(id, System.currentTimeMillis() / 1000)
+    }
+
+    private suspend fun cleanupDuplicateDefaults(defaultMasks: List<AiMask>): AiMask? {
+        val retainedDefault = defaultMasks.firstOrNull() ?: return null
+        val duplicateIds = defaultMasks.drop(1).map { it.id }
+        if (duplicateIds.isNotEmpty()) {
+            transactionRunner.run {
+                chatRoomDao.clearMaskIdByMaskIds(duplicateIds)
+                aiMaskDao.deleteByIds(duplicateIds)
+            }
+        }
+        return retainedDefault
     }
 }

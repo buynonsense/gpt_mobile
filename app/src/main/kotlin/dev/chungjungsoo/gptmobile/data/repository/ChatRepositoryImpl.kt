@@ -18,7 +18,6 @@ import com.google.ai.client.generativeai.type.SafetySetting
 import com.google.ai.client.generativeai.type.content
 import com.google.ai.client.generativeai.type.generationConfig
 import dev.chungjungsoo.gptmobile.data.ModelConstants
-import dev.chungjungsoo.gptmobile.data.database.dao.AiMaskDao
 import dev.chungjungsoo.gptmobile.data.database.dao.ChatRoomDao
 import dev.chungjungsoo.gptmobile.data.database.dao.MessageDao
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
@@ -44,7 +43,7 @@ import kotlinx.coroutines.flow.onStart
 
 class ChatRepositoryImpl @Inject constructor(
     private val appContext: Context,
-    private val aiMaskDao: AiMaskDao,
+    private val aiMaskRepository: AiMaskRepository,
     private val chatRoomDao: ChatRoomDao,
     private val messageDao: MessageDao,
     private val settingRepository: SettingRepository,
@@ -207,9 +206,8 @@ class ChatRepositoryImpl @Inject constructor(
     override suspend fun fetchMessages(chatId: Int): List<Message> = messageDao.loadMessages(chatId)
 
     override suspend fun findOrCreateChatForRole(roleId: Int, enabledPlatforms: List<ApiType>?): ChatRoom {
-        val role = aiMaskDao.getById(roleId)
-        val resolvedRole = role ?: aiMaskDao.getDefault()
-            ?: error("默认角色不存在，且无法按 roleId=$roleId 找到角色")
+        val role = aiMaskRepository.fetchById(roleId)
+        val resolvedRole = role ?: aiMaskRepository.fetchDefault()
         val activePlatforms = enabledPlatforms ?: fetchEnabledPlatforms()
         val existingChat = if (resolvedRole.isDefault) {
             chatRoomDao.getLatestActiveDefaultChat()
@@ -219,7 +217,7 @@ class ChatRepositoryImpl @Inject constructor(
 
         if (existingChat != null) {
             if (!resolvedRole.isDefault) {
-                aiMaskDao.touch(resolvedRole.id, System.currentTimeMillis() / 1000)
+                aiMaskRepository.touch(resolvedRole.id)
             }
             return existingChat
         }
@@ -233,7 +231,7 @@ class ChatRepositoryImpl @Inject constructor(
         )
         val chatId = chatRoomDao.addChatRoom(newChat).toInt()
         if (!resolvedRole.isDefault) {
-            aiMaskDao.touch(resolvedRole.id, System.currentTimeMillis() / 1000)
+            aiMaskRepository.touch(resolvedRole.id)
         }
         return newChat.copy(id = chatId)
     }

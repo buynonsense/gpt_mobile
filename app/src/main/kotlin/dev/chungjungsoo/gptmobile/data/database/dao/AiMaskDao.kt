@@ -25,6 +25,9 @@ interface AiMaskDao {
     @Query("SELECT * FROM ai_masks WHERE is_default = 1 LIMIT 1")
     suspend fun getDefault(): AiMask?
 
+    @Query("SELECT * FROM ai_masks WHERE is_default = 1 ORDER BY mask_id ASC")
+    suspend fun getDefaults(): List<AiMask>
+
     @Query("SELECT * FROM ai_masks WHERE is_archived = 0 ORDER BY last_used_at DESC, updated_at DESC LIMIT :limit")
     suspend fun getRecent(limit: Int): List<AiMask>
 
@@ -36,6 +39,23 @@ interface AiMaskDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(mask: AiMask): Long
+
+    @Query(
+        """
+        INSERT INTO ai_masks (name, system_prompt, group_name, is_default, is_archived, updated_at, last_used_at)
+        SELECT :name, :systemPrompt, :groupName, 1, 0, :updatedAt, :lastUsedAt
+        WHERE NOT EXISTS (
+            SELECT 1 FROM ai_masks WHERE is_default = 1
+        )
+        """
+    )
+    suspend fun insertDefaultIfMissing(
+        name: String,
+        systemPrompt: String,
+        groupName: String,
+        updatedAt: Long,
+        lastUsedAt: Long
+    )
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(masks: List<AiMask>)
@@ -51,6 +71,9 @@ interface AiMaskDao {
 
     @Query("DELETE FROM ai_masks WHERE mask_id = :id")
     suspend fun deleteById(id: Int)
+
+    @Query("DELETE FROM ai_masks WHERE mask_id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Int>)
 
     @Query("DELETE FROM ai_masks")
     suspend fun deleteAll()

@@ -41,6 +41,9 @@ interface ChatRoomDao {
     @Query("UPDATE chats SET is_archived = 0 WHERE mask_id = :maskId")
     suspend fun restoreByMaskId(maskId: Int)
 
+    @Query("UPDATE chats SET mask_id = NULL WHERE mask_id IN (:maskIds)")
+    suspend fun clearMaskIdByMaskIds(maskIds: List<Int>)
+
     @Query("UPDATE chats SET is_archived = 1 WHERE chat_id = :chatId")
     suspend fun archiveById(chatId: Int)
 
