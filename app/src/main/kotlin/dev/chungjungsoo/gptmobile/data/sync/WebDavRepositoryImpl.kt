@@ -23,6 +23,7 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.util.encodeBase64
 import java.io.IOException
+import java.net.URI
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -74,11 +75,7 @@ class WebDavRepositoryImpl @Inject constructor(
     }
 
     override suspend fun downloadBackup(config: WebDavConfig, password: String, remotePath: String): String {
-        val target = if (remotePath.startsWith("http://") || remotePath.startsWith("https://")) {
-            remotePath
-        } else {
-            buildFilePath(config, remotePath.trimStart('/').substringAfterLast('/'))
-        }
+        val target = resolveRemoteTarget(config, remotePath)
         val response = executeRequest {
             client.get(target) {
                 header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
@@ -90,6 +87,20 @@ class WebDavRepositoryImpl @Inject constructor(
         }
 
         return response.bodyAsText()
+    }
+
+    override suspend fun deleteBackup(config: WebDavConfig, password: String, remotePath: String) {
+        val target = resolveRemoteTarget(config, remotePath)
+        val response = executeRequest {
+            client.request(target) {
+                method = HttpMethod.Delete
+                header(HttpHeaders.Authorization, basicAuthorization(config.username, password))
+            }
+        }
+
+        if (response.status != HttpStatusCode.NoContent && !response.status.isSuccess()) {
+            throw toSyncOperationException(response.status)
+        }
     }
 
     private suspend fun ensureDirectory(config: WebDavConfig, password: String) {
@@ -157,6 +168,30 @@ class WebDavRepositoryImpl @Inject constructor(
     }
 
     companion object {
+        internal fun resolveRemoteTarget(config: WebDavConfig, remotePath: String): String {
+            if (remotePath.startsWith("http://") || remotePath.startsWith("https://")) {
+                return remotePath
+            }
+            if (remotePath.startsWith("/")) {
+                return URI(config.baseUrl.trimEnd('/') + "/").resolve(remotePath).toString()
+            }
+
+            val normalizedConfigPath = config.remotePath.trim().trim('/')
+            val normalizedRemotePath = remotePath.trim().trimStart('/')
+            return if (normalizedConfigPath.isNotEmpty() && normalizedRemotePath.startsWith("$normalizedConfigPath/")) {
+                "${config.baseUrl.trimEnd('/')}/$normalizedRemotePath"
+            } else {
+                val normalizedBase = config.baseUrl.trimEnd('/')
+                val normalizedPath = config.remotePath.trim().trim('/').takeIf { it.isNotEmpty() }
+                val directoryPath = if (normalizedPath == null) {
+                    "$normalizedBase/"
+                } else {
+                    "$normalizedBase/$normalizedPath/"
+                }
+                directoryPath + normalizedRemotePath.substringAfterLast('/')
+            }
+        }
+
         internal fun toSyncOperationException(status: HttpStatusCode): SyncOperationException {
             val category = when (status) {
                 HttpStatusCode.Unauthorized,

@@ -1,6 +1,7 @@
 package dev.chungjungsoo.gptmobile.data.sync
 
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncErrorCategory
+import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
 import io.ktor.http.HttpStatusCode
 import java.io.IOException
 import org.junit.Assert.assertEquals
@@ -40,5 +41,18 @@ class WebDavRepositoryImplErrorTest {
         val error = WebDavRepositoryImpl.toSyncOperationException(IOException("timeout"))
 
         assertEquals(SyncErrorCategory.WEBDAV_NETWORK_ERROR, error.category)
+    }
+
+    @Test
+    fun resolveRemoteTarget_withAbsoluteHref_usesHostRootResolution() {
+        val config = WebDavConfig(
+            baseUrl = "https://example.com/webdav/root",
+            username = "user",
+            remotePath = "backup"
+        )
+
+        val target = WebDavRepositoryImpl.resolveRemoteTarget(config, "/webdav/root/file.json")
+
+        assertEquals("https://example.com/webdav/root/file.json", target)
     }
 }

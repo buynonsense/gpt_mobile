@@ -1,7 +1,9 @@
 package dev.chungjungsoo.gptmobile.presentation.ui.setting
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
@@ -184,6 +186,111 @@ class SyncScreenTest {
         composeRule.onNodeWithText("remote.json").performScrollTo().assertIsDisplayed()
     }
 
+    @Test
+    fun localTab_recoveryConfirmation_showsMetadataAndActions() {
+        val exportedAt = 1_710_000_000_000L
+
+        setContentWithImportedBackup(
+            fileName = "backup.json",
+            exportedAt = exportedAt
+        )
+
+        composeRule.onNodeWithText("backup.json").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText(formatExpectedTimestamp(exportedAt)).performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("恢复会覆盖当前本地数据，确认前建议先导出一份最新备份。")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithTag(RESTORE_CURRENT_DATA_BEFORE_CONFIRM_BUTTON_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("先备份当前数据").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag(CONFIRM_RESTORE_IMPORTED_BACKUP_BUTTON_TAG)
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeRule.onNodeWithText("确认恢复").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun webDavTab_remoteFileItem_showsNameTimeAndSize() {
+        val viewModel = setContentWithRemoteBackups(
+            remoteBackups = listOf(
+                WebDavRemoteFile(
+                    path = "/dav/remote-a.json",
+                    name = "remote-a.json",
+                    modifiedAt = "2026-04-02 10:00",
+                    contentLength = 2048
+                )
+            )
+        )
+
+        openWebDavTabAndRefresh(viewModel)
+
+        composeRule.onNodeWithText("remote-a.json").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("2026-04-02 10:00").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("2048 B").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun webDavTab_deleteRemoteBackup_showsConfirmDialog() {
+        val viewModel = setContentWithRemoteBackups(
+            remoteBackups = listOf(
+                WebDavRemoteFile(
+                    path = "/dav/remote-a.json",
+                    name = "remote-a.json",
+                    modifiedAt = "2026-04-02 10:00",
+                    contentLength = 2048
+                )
+            )
+        )
+
+        openWebDavTabAndRefresh(viewModel)
+
+        composeRule.onNodeWithTag(remoteBackupDeleteButtonTag("remote-a.json"))
+            .performScrollTo()
+            .performClick()
+
+        composeRule.onNodeWithText("删除云端备份").assertIsDisplayed()
+        composeRule.onNodeWithText("确定删除云端备份“remote-a.json”吗？")
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun webDavTab_confirmDeleteSelectedRemoteBackup_refreshesListAndUpdatesSelection() {
+        val viewModel = setContentWithRemoteBackups(
+            remoteBackups = listOf(
+                WebDavRemoteFile(
+                    path = "/dav/remote-a.json",
+                    name = "remote-a.json",
+                    modifiedAt = "2026-04-02 10:00",
+                    contentLength = 2048
+                ),
+                WebDavRemoteFile(
+                    path = "/dav/remote-b.json",
+                    name = "remote-b.json",
+                    modifiedAt = "2026-04-02 11:00",
+                    contentLength = 4096
+                )
+            ),
+            remoteBackupContents = mapOf(
+                "remote-b.json" to validBackupJson(exportedAt = 2_222L)
+            )
+        )
+
+        openWebDavTabAndRefresh(viewModel)
+
+        composeRule.onNodeWithTag(remoteBackupDeleteButtonTag("remote-a.json"))
+            .performScrollTo()
+            .performClick()
+        composeRule.onNodeWithTag(CONFIRM_DELETE_REMOTE_BACKUP_BUTTON_TAG)
+            .assertIsDisplayed()
+            .performClick()
+        composeRule.waitForIdle()
+
+        composeRule.onAllNodesWithText("remote-a.json").assertCountEquals(0)
+        composeRule.onNodeWithText("从云端下载").performScrollTo().performClick()
+        composeRule.onNodeWithText("remote-b.json").performScrollTo().assertIsDisplayed()
+    }
+
     private fun setContentWithSnapshot(snapshot: SyncStatusSnapshot?) {
         val viewModel = SyncViewModel(
             syncRepository = FakeSyncRepository(),
@@ -201,6 +308,68 @@ class SyncScreenTest {
         }
         composeRule.waitForIdle()
     }
+
+    private fun setContentWithImportedBackup(fileName: String, exportedAt: Long) {
+        val backupJson = validBackupJson(exportedAt)
+        val viewModel = SyncViewModel(
+            syncRepository = FakeSyncRepository(),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        composeRule.setContent {
+            GPTMobileTheme {
+                SyncScreen(
+                    onNavigationClick = {},
+                    syncViewModel = viewModel
+                )
+            }
+        }
+
+        composeRule.runOnIdle {
+            viewModel.importBackupFile(fileName, backupJson)
+        }
+        composeRule.waitForIdle()
+    }
+
+    private fun setContentWithRemoteBackups(
+        remoteBackups: List<WebDavRemoteFile>,
+        remoteBackupContents: Map<String, String> = emptyMap()
+    ): SyncViewModel {
+        val viewModel = SyncViewModel(
+            syncRepository = FakeSyncRepository(
+                remoteBackups = remoteBackups,
+                remoteBackupContents = remoteBackupContents
+            ),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        composeRule.setContent {
+            GPTMobileTheme {
+                SyncScreen(
+                    onNavigationClick = {},
+                    syncViewModel = viewModel
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        return viewModel
+    }
+
+    private fun openWebDavTabAndRefresh(viewModel: SyncViewModel) {
+        composeRule.runOnIdle {
+            viewModel.updateWebDavPassword("dav-password")
+        }
+        composeRule.onNodeWithTag(SYNC_TAB_WEBDAV_TAG).performClick()
+        composeRule.onNodeWithText("刷新云端备份").performScrollTo().performClick()
+        composeRule.waitForIdle()
+    }
+
+    private fun formatExpectedTimestamp(timestamp: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
+            .format(java.util.Date(timestamp))
+
+    private fun validBackupJson(exportedAt: Long): String =
+        "{\"schemaVersion\":1,\"exportedAt\":$exportedAt,\"appVersion\":\"test\",\"backupType\":\"full\",\"summary\":{\"chatRoomCount\":0,\"messageCount\":0,\"aiMaskCount\":0,\"containsSecrets\":false},\"payload\":{\"settings\":{\"platforms\":[],\"theme\":{\"dynamicTheme\":\"OFF\",\"themeMode\":\"SYSTEM\"},\"streamingStyle\":{\"value\":0,\"name\":\"TYPEWRITER\"}},\"database\":{\"chatRooms\":[],\"messages\":[],\"aiMasks\":[]}}}"
 
     private class FakeSettingRepository(
         private val initialSnapshot: SyncStatusSnapshot? = null
@@ -242,15 +411,24 @@ class SyncScreenTest {
 
     private class FakeSyncRepository(
         private val conflict: SyncConflict? = null,
-        private val remoteBackupContent: String = ""
+        private val remoteBackupContent: String = "",
+        remoteBackups: List<WebDavRemoteFile> = emptyList(),
+        private val remoteBackupContents: Map<String, String> = emptyMap()
     ) : SyncRepository {
+        private val mutableRemoteBackups = remoteBackups.toMutableList()
+
         override suspend fun exportBackupJson(): String = "{\"backup\":true}"
 
         override suspend fun restoreBackupJson(content: String) = Unit
 
         override suspend fun parseBackup(content: String): BackupFile = BackupFile(
             schemaVersion = 1,
-            exportedAt = 1_234L,
+            exportedAt = Regex("\\\"exportedAt\\\":(\\d+)")
+                .find(content)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?.toLongOrNull()
+                ?: 1_234L,
             appVersion = "test",
             backupType = "local",
             summary = BackupSummary(
@@ -289,13 +467,18 @@ class SyncScreenTest {
 
         override suspend fun getWebDavPassword(): String? = null
 
-        override suspend fun listRemoteBackups(password: String): List<WebDavRemoteFile> = emptyList()
+        override suspend fun listRemoteBackups(password: String): List<WebDavRemoteFile> = mutableRemoteBackups.toList()
 
         override suspend fun detectUploadConflict(password: String): SyncConflict? = conflict
 
         override suspend fun uploadBackup(password: String, overwrite: Boolean): String = ""
 
-        override suspend fun downloadRemoteBackup(password: String, remoteFileName: String): String = remoteBackupContent
+        override suspend fun downloadRemoteBackup(password: String, remoteFileName: String): String =
+            remoteBackupContents[remoteFileName] ?: remoteBackupContent
+
+        override suspend fun deleteRemoteBackup(password: String, remotePath: String) {
+            mutableRemoteBackups.removeAll { it.path == remotePath }
+        }
     }
 
     private companion object {

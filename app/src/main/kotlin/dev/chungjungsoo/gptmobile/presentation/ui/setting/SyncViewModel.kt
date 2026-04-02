@@ -49,6 +49,7 @@ class SyncViewModel @Inject constructor(
         val importedBackupFileName: String? = null,
         val importedBackupExportedAt: Long? = null,
         val remoteBackups: List<WebDavRemoteFile> = emptyList(),
+        val pendingDeleteRemoteBackup: WebDavRemoteFile? = null,
         val uploadConflict: SyncConflict? = null,
         val syncStatusSnapshot: SyncStatusSnapshot? = null
     )
@@ -88,6 +89,14 @@ class SyncViewModel @Inject constructor(
 
     fun updateSelectedRemoteFile(value: String) = _uiState.update { it.copy(selectedRemoteFile = value) }
 
+    fun promptDeleteRemoteBackup(file: WebDavRemoteFile) {
+        _uiState.update { it.copy(pendingDeleteRemoteBackup = file) }
+    }
+
+    fun dismissDeleteRemoteBackupDialog() {
+        _uiState.update { it.copy(pendingDeleteRemoteBackup = null) }
+    }
+
     fun selectTab(tab: SyncPageTab) = _uiState.update { it.copy(selectedTab = tab) }
 
     fun showWebDavConfigDialog() = _uiState.update { it.copy(showWebDavConfigDialog = true) }
@@ -116,6 +125,10 @@ class SyncViewModel @Inject constructor(
                 )
             }
         }, operation = SyncOperation.LOCAL_EXPORT, fallbackErrorResId = R.string.backup_export_failed)
+    }
+
+    fun exportCurrentDataBeforeRestore() {
+        exportBackup(requestSaveAfterExport = true)
     }
 
     fun consumePendingExportSaveRequest() {
@@ -277,12 +290,44 @@ class SyncViewModel @Inject constructor(
             showStatus(R.string.backup_downloaded)
             _uiState.update {
                 it.copy(
+                    selectedTab = SyncPageTab.LOCAL,
                     importedBackupJson = content,
                     importedBackupFileName = state.selectedRemoteFile,
                     importedBackupExportedAt = backupFile.exportedAt
                 )
             }
         }, operation = SyncOperation.CLOUD_DOWNLOAD)
+    }
+
+    fun deletePendingRemoteBackup() {
+        val state = _uiState.value
+        val remoteBackup = state.pendingDeleteRemoteBackup ?: return
+        if (state.webDavPassword.isBlank()) {
+            showError(R.string.webdav_password_required)
+            return
+        }
+
+        dismissDeleteRemoteBackupDialog()
+        launchSafely(action = {
+            syncRepository.deleteRemoteBackup(
+                password = state.webDavPassword,
+                remotePath = remoteBackup.path
+            )
+            val remoteFiles = syncRepository.listRemoteBackups(state.webDavPassword)
+            val nextSelectedRemoteFile = when {
+                remoteFiles.isEmpty() -> ""
+                state.selectedRemoteFile == remoteBackup.name -> remoteFiles.first().name
+                remoteFiles.any { it.name == state.selectedRemoteFile } -> state.selectedRemoteFile
+                else -> remoteFiles.first().name
+            }
+            showStatus(R.string.remote_backup_deleted, remoteBackup.name)
+            _uiState.update {
+                it.copy(
+                    remoteBackups = remoteFiles,
+                    selectedRemoteFile = nextSelectedRemoteFile
+                )
+            }
+        }, fallbackErrorResId = R.string.unknown_sync_error)
     }
 
     fun clearMessages() {

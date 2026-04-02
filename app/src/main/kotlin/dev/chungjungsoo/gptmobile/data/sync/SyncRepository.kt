@@ -18,4 +18,5 @@ interface SyncRepository {
     suspend fun detectUploadConflict(password: String): SyncConflict?
     suspend fun uploadBackup(password: String, overwrite: Boolean): String
     suspend fun downloadRemoteBackup(password: String, remoteFileName: String): String
+    suspend fun deleteRemoteBackup(password: String, remotePath: String)
 }

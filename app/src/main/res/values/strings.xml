@@ -253,6 +253,9 @@
     <string name="restore_backup">恢复备份</string>
     <string name="restore_backup_description">恢复会覆盖当前本地数据，恢复前只显示文件名和备份时间。</string>
     <string name="restore_to_local">恢复到本地</string>
+    <string name="restore_backup_risk_warning">恢复会覆盖当前本地数据，确认前建议先导出一份最新备份。</string>
+    <string name="backup_current_data_before_restore">先备份当前数据</string>
+    <string name="confirm_restore_backup">确认恢复</string>
     <string name="backup_restored">本地数据已覆盖恢复</string>
     <string name="backup_restore_failed">恢复备份失败</string>
     <string name="backup_file_name_label">文件名</string>
@@ -306,10 +309,13 @@
     <string name="download_from_cloud">从云端下载</string>
     <string name="backup_downloaded">已下载云端备份，可选择恢复到本地</string>
     <string name="backup_download_failed">下载云端备份失败</string>
+    <string name="remote_backup_deleted">已删除云端备份：%1$s</string>
     <string name="no_remote_backups">云端还没有备份文件。</string>
     <string name="webdav_config_not_saved">当前 WebDAV 配置尚未保存</string>
     <string name="remote_backup_list_item">%1$s · %2$s</string>
     <string name="remote_backup_size_bytes">%1$d B</string>
+    <string name="delete_remote_backup_title">删除云端备份</string>
+    <string name="delete_remote_backup_confirm">确定删除云端备份“%1$s”吗？</string>
     <string name="overwrite_remote_backup">覆盖云端备份</string>
     <string name="use_remote_backup">以云端为准</string>
     <string name="conflict_remote_backup_loaded">已将云端备份加载到恢复区，请确认后再恢复到本地</string>

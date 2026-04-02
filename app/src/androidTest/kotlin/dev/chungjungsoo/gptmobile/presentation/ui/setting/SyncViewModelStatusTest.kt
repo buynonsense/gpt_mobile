@@ -84,7 +84,7 @@ class SyncViewModelStatusTest {
     }
 
     @Test
-    fun importBackupFile_setsFileNameAndExportedAt() {
+    fun importBackupFile_setsRecoveryConfirmationMetadata() {
         val settingRepository = FakeSettingRepository()
         val viewModel = SyncViewModel(
             syncRepository = FakeSyncRepository(),
@@ -106,6 +106,85 @@ class SyncViewModelStatusTest {
             viewModel.uiState.value.importedBackupFileName
         )
         assertEquals(1_234L, viewModel.uiState.value.importedBackupExportedAt)
+    }
+
+    @Test
+    fun exportCurrentDataBeforeRestore_doesNotTriggerRestore() {
+        val syncRepository = FakeSyncRepository(exportedBackupJson = CURRENT_BACKUP_JSON)
+        val viewModel = SyncViewModel(
+            syncRepository = syncRepository,
+            settingRepository = FakeSettingRepository(),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        viewModel.importBackupFile(
+            fileName = "backup.json",
+            content = VALID_BACKUP_JSON
+        )
+
+        waitUntilState(timeoutMillis = 5_000) {
+            viewModel.uiState.value.importedBackupFileName != null
+        }
+
+        viewModel.exportCurrentDataBeforeRestore()
+
+        waitUntilState(timeoutMillis = 5_000) {
+            viewModel.uiState.value.pendingExportSaveRequest
+        }
+
+        assertEquals(0, syncRepository.restoreCalls)
+    }
+
+    @Test
+    fun downloadSelectedRemoteBackup_switchesToLocalTab() {
+        val viewModel = SyncViewModel(
+            syncRepository = FakeSyncRepository(remoteBackupJson = VALID_BACKUP_JSON),
+            settingRepository = FakeSettingRepository(),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        viewModel.selectTab(SyncViewModel.SyncPageTab.WEBDAV)
+        viewModel.updateWebDavPassword("dav")
+        viewModel.updateSelectedRemoteFile("remote.json")
+        viewModel.downloadSelectedRemoteBackup()
+
+        waitUntilState(timeoutMillis = 5_000) {
+            viewModel.uiState.value.selectedTab == SyncViewModel.SyncPageTab.LOCAL
+        }
+
+        assertEquals(SyncViewModel.SyncPageTab.LOCAL, viewModel.uiState.value.selectedTab)
+        assertEquals("remote.json", viewModel.uiState.value.importedBackupFileName)
+        assertEquals(1_234L, viewModel.uiState.value.importedBackupExportedAt)
+    }
+
+    @Test
+    fun restoreImportedBackup_callsRestoreOnlyOnConfirm() {
+        val syncRepository = FakeSyncRepository()
+        val viewModel = SyncViewModel(
+            syncRepository = syncRepository,
+            settingRepository = FakeSettingRepository(),
+            appContext = ApplicationProvider.getApplicationContext()
+        )
+
+        viewModel.importBackupFile(
+            fileName = "backup.json",
+            content = VALID_BACKUP_JSON
+        )
+
+        waitUntilState(timeoutMillis = 5_000) {
+            viewModel.uiState.value.importedBackupFileName != null
+        }
+
+        assertEquals(0, syncRepository.restoreCalls)
+
+        viewModel.restoreImportedBackup()
+
+        waitUntilState(timeoutMillis = 5_000) {
+            syncRepository.restoreCalls == 1
+        }
+
+        assertEquals(1, syncRepository.restoreCalls)
+        assertEquals(VALID_BACKUP_JSON, syncRepository.lastRestoredContent)
     }
 
     @Test
@@ -398,15 +477,24 @@ class SyncViewModelStatusTest {
         private val allowConflictDetectionWithoutSavedConfig: Boolean = false
     ) : SyncRepository {
 
+        var restoreCalls: Int = 0
+            private set
+
+        var lastRestoredContent: String? = null
+            private set
+
         override suspend fun exportBackupJson(): String = exportedBackupJson
 
-        override suspend fun restoreBackupJson(content: String) = Unit
+        override suspend fun restoreBackupJson(content: String) {
+            restoreCalls += 1
+            lastRestoredContent = content
+        }
 
         override suspend fun parseBackup(content: String): BackupFile {
             parseError?.let { throw it }
             return BackupFile(
                 schemaVersion = 1,
-                exportedAt = 0L,
+                exportedAt = 1_234L,
                 appVersion = "test",
                 backupType = "local",
                 summary = BackupSummary(
@@ -471,12 +559,15 @@ class SyncViewModelStatusTest {
             return remoteBackupJson
         }
 
+        override suspend fun deleteRemoteBackup(password: String, remotePath: String) = Unit
+
         private fun requireSavedWebDavConfig() {
             check(savedWebDavConfig) { "WebDAV config is not set" }
         }
     }
 
     companion object {
+        private const val CURRENT_BACKUP_JSON = "{\"current\":true}"
         private const val VALID_BACKUP_JSON = "{\"remote\":true}"
 
         private fun fakeConflict(remoteFileName: String): SyncConflict = SyncConflict(

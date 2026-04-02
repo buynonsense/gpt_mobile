@@ -116,6 +116,11 @@ class SyncRepositoryImpl @Inject constructor(
         return webDavRepository.downloadBackup(config, password, remoteFileName)
     }
 
+    override suspend fun deleteRemoteBackup(password: String, remotePath: String) {
+        val config = requireWebDavConfig()
+        webDavRepository.deleteBackup(config, password, remotePath)
+    }
+
     private suspend fun requireWebDavConfig(): WebDavConfig {
         return settingRepository.fetchWebDavConfig()
             ?: throw IllegalStateException("WebDAV config is not set")

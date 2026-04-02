@@ -8,4 +8,5 @@ interface WebDavRepository {
     suspend fun listBackupFiles(config: WebDavConfig, password: String): List<WebDavRemoteFile>
     suspend fun uploadBackup(config: WebDavConfig, password: String, fileName: String, content: String)
     suspend fun downloadBackup(config: WebDavConfig, password: String, remotePath: String): String
+    suspend fun deleteBackup(config: WebDavConfig, password: String, remotePath: String)
 }

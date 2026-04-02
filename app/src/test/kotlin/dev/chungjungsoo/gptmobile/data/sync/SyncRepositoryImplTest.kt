@@ -110,6 +110,17 @@ class SyncRepositoryImplTest {
     }
 
     @Test
+    fun deleteRemoteBackup_withoutConfig_throws() {
+        fakeSettingRepository.savedConfig = null
+
+        assertThrowsWithMessageFragment("WebDAV config") {
+            runBlocking {
+                repository.deleteRemoteBackup(password = "pw", remotePath = "/backup/remote.json")
+            }
+        }
+    }
+
+    @Test
     fun detectUploadConflict_withoutRemoteBackups_returnsNull() = runBlocking {
         fakeSettingRepository.savedConfig = storedConfig()
         fakeWebDavRepository.remoteFiles = emptyList()
@@ -266,6 +277,17 @@ class SyncRepositoryImplTest {
     }
 
     @Test
+    fun deleteRemoteBackup_delegatesRemotePathToWebDavRepository() = runBlocking {
+        fakeSettingRepository.savedConfig = storedConfig()
+
+        repository.deleteRemoteBackup(password = "pw", remotePath = "/backup/remote.json")
+
+        assertEquals(1, fakeWebDavRepository.deleteCalls.size)
+        assertEquals("pw", fakeWebDavRepository.deleteCalls.single().password)
+        assertEquals("/backup/remote.json", fakeWebDavRepository.deleteCalls.single().remotePath)
+    }
+
+    @Test
     fun saveWebDavConfig_persistsNormalizedConfig() = runBlocking {
         repository.saveWebDavConfig(
             baseUrl = "https://dav.example.com/",
@@ -390,6 +412,7 @@ class SyncRepositoryImplTest {
         var remoteFiles: List<WebDavRemoteFile> = emptyList()
         var downloadedContent: String = ""
         var downloadedRemotePath: String? = null
+        val deleteCalls = mutableListOf<DeleteCall>()
         val uploadCalls = mutableListOf<UploadCall>()
 
         override suspend fun testConnection(config: WebDavConfig, password: String) {
@@ -407,7 +430,17 @@ class SyncRepositoryImplTest {
             downloadedRemotePath = remotePath
             return downloadedContent
         }
+
+        override suspend fun deleteBackup(config: WebDavConfig, password: String, remotePath: String) {
+            deleteCalls += DeleteCall(config = config, password = password, remotePath = remotePath)
+        }
     }
+
+    private data class DeleteCall(
+        val config: WebDavConfig,
+        val password: String,
+        val remotePath: String
+    )
 
     private data class UploadCall(
         val config: WebDavConfig,

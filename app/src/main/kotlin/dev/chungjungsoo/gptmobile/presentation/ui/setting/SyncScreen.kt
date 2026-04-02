@@ -52,6 +52,11 @@ internal const val SYNC_WEBDAV_SECTION_TITLE_TAG = "sync_webdav_section_title"
 internal const val SYNC_TAB_LOCAL_TAG = "sync_tab_local"
 internal const val SYNC_TAB_WEBDAV_TAG = "sync_tab_webdav"
 internal const val OPEN_WEBDAV_CONFIG_DIALOG_TAG = "open_webdav_config_dialog"
+internal const val RESTORE_CURRENT_DATA_BEFORE_CONFIRM_BUTTON_TAG = "restore_current_data_before_confirm_button"
+internal const val CONFIRM_RESTORE_IMPORTED_BACKUP_BUTTON_TAG = "confirm_restore_imported_backup_button"
+internal const val CONFIRM_DELETE_REMOTE_BACKUP_BUTTON_TAG = "confirm_delete_remote_backup_button"
+
+internal fun remoteBackupDeleteButtonTag(fileName: String): String = "remote_backup_delete_button_$fileName"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,6 +135,7 @@ fun SyncScreen(
                     uiState = uiState,
                     onExportBackup = { syncViewModel.exportBackup(requestSaveAfterExport = true) },
                     onImportFromFile = { importBackupLauncher.launch(arrayOf("application/json")) },
+                    onExportCurrentDataBeforeRestore = syncViewModel::exportCurrentDataBeforeRestore,
                     onRestoreBackup = syncViewModel::restoreImportedBackup
                 )
 
@@ -140,7 +146,8 @@ fun SyncScreen(
                     onRefreshRemoteBackups = syncViewModel::loadRemoteBackups,
                     onUpload = { syncViewModel.uploadBackup(overwrite = false) },
                     onDownload = syncViewModel::downloadSelectedRemoteBackup,
-                    onSelectedRemoteFileChange = syncViewModel::updateSelectedRemoteFile
+                    onSelectedRemoteFileChange = syncViewModel::updateSelectedRemoteFile,
+                    onDeleteRemoteBackup = syncViewModel::promptDeleteRemoteBackup
                 )
             }
 
@@ -178,6 +185,35 @@ fun SyncScreen(
             onSave = {
                 syncViewModel.saveWebDavConfig()
                 syncViewModel.hideWebDavConfigDialog()
+            }
+        )
+    }
+
+    uiState.pendingDeleteRemoteBackup?.let { remoteBackup ->
+        AlertDialog(
+            onDismissRequest = syncViewModel::dismissDeleteRemoteBackupDialog,
+            confirmButton = {
+                TextButton(
+                    modifier = Modifier.testTag(CONFIRM_DELETE_REMOTE_BACKUP_BUTTON_TAG),
+                    enabled = !uiState.isBusy,
+                    onClick = syncViewModel::deletePendingRemoteBackup
+                ) {
+                    Text(stringResource(R.string.delete))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = syncViewModel::dismissDeleteRemoteBackupDialog) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+            title = { Text(stringResource(R.string.delete_remote_backup_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.delete_remote_backup_confirm,
+                        remoteBackup.name
+                    )
+                )
             }
         )
     }
@@ -264,6 +300,7 @@ private fun LocalBackupContent(
     uiState: SyncViewModel.UiState,
     onExportBackup: () -> Unit,
     onImportFromFile: () -> Unit,
+    onExportCurrentDataBeforeRestore: () -> Unit,
     onRestoreBackup: () -> Unit
 ) {
     SectionTitle(stringResource(R.string.local_backup))
@@ -308,12 +345,25 @@ private fun LocalBackupContent(
                 }
             }
         )
-        TextButton(
+        SectionDescription(stringResource(R.string.restore_backup_risk_warning))
+        Row(
             modifier = Modifier.padding(horizontal = 20.dp),
-            enabled = !uiState.isBusy,
-            onClick = onRestoreBackup
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text(stringResource(R.string.restore_to_local))
+            TextButton(
+                modifier = Modifier.testTag(RESTORE_CURRENT_DATA_BEFORE_CONFIRM_BUTTON_TAG),
+                enabled = !uiState.isBusy,
+                onClick = onExportCurrentDataBeforeRestore
+            ) {
+                Text(stringResource(R.string.backup_current_data_before_restore))
+            }
+            TextButton(
+                modifier = Modifier.testTag(CONFIRM_RESTORE_IMPORTED_BACKUP_BUTTON_TAG),
+                enabled = !uiState.isBusy,
+                onClick = onRestoreBackup
+            ) {
+                Text(stringResource(R.string.confirm_restore_backup))
+            }
         }
     }
 }
@@ -326,7 +376,8 @@ private fun WebDavContent(
     onRefreshRemoteBackups: () -> Unit,
     onUpload: () -> Unit,
     onDownload: () -> Unit,
-    onSelectedRemoteFileChange: (String) -> Unit
+    onSelectedRemoteFileChange: (String) -> Unit,
+    onDeleteRemoteBackup: (dev.chungjungsoo.gptmobile.data.sync.model.WebDavRemoteFile) -> Unit
 ) {
     SectionTitle(stringResource(R.string.sync_status_title))
     SectionDescription(stringResource(R.string.sync_status_description))
@@ -378,9 +429,11 @@ private fun WebDavContent(
     SectionDescription(stringResource(R.string.selected_remote_backup))
     uiState.remoteBackups.forEach { file ->
         SyncRemoteFileItem(
-            fileName = file.name,
+            remoteFile = file,
             selected = uiState.selectedRemoteFile == file.name,
-            onClick = { onSelectedRemoteFileChange(file.name) }
+            enabled = !uiState.isBusy,
+            onClick = { onSelectedRemoteFileChange(file.name) },
+            onDelete = { onDeleteRemoteBackup(file) }
         )
     }
     if (uiState.remoteBackups.isEmpty()) {
@@ -389,19 +442,56 @@ private fun WebDavContent(
 }
 
 @Composable
-private fun SyncRemoteFileItem(fileName: String, selected: Boolean, onClick: () -> Unit) {
+private fun SyncRemoteFileItem(
+    remoteFile: dev.chungjungsoo.gptmobile.data.sync.model.WebDavRemoteFile,
+    selected: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
     OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 6.dp)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
     ) {
-        Text(
-            modifier = Modifier.padding(16.dp),
-            text = fileName,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-            style = MaterialTheme.typography.bodyMedium
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = remoteFile.name,
+                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    remoteFile.modifiedAt?.takeIf { it.isNotBlank() }?.let { modifiedAt ->
+                        Text(
+                            text = modifiedAt,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    remoteFile.contentLength?.let { contentLength ->
+                        Text(
+                            text = stringResource(R.string.remote_backup_size_bytes, contentLength),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            TextButton(
+                modifier = Modifier.testTag(remoteBackupDeleteButtonTag(remoteFile.name)),
+                enabled = enabled,
+                onClick = onDelete
+            ) {
+                Text(stringResource(R.string.delete))
+            }
+        }
     }
 }
 
