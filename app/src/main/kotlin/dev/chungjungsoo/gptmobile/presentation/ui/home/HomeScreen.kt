@@ -17,14 +17,13 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +82,9 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = roleManagerOnClick) {
+                        Icon(imageVector = Icons.Outlined.ManageAccounts, contentDescription = stringResource(R.string.role_management))
+                    }
                     IconButton(onClick = settingOnClick) {
                         Icon(imageVector = Icons.Outlined.Settings, contentDescription = stringResource(R.string.settings))
                     }
@@ -96,13 +98,6 @@ fun HomeScreen(
                     onClick = { homeViewModel.openRole(role.id, onChatResolved) }
                 )
             }
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = roleManagerOnClick,
-                icon = { Icon(imageVector = Icons.Filled.Add, contentDescription = stringResource(R.string.create_role)) },
-                text = { Text(text = stringResource(R.string.create_role)) }
-            )
         }
     ) { innerPadding ->
         Box(
