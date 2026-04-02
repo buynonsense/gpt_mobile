@@ -78,6 +78,18 @@ class AiMaskRepositoryImplTest {
         assertEquals(1, roles.single().id)
     }
 
+    @Test
+    fun deletePermanently_whenTargetIsDefaultRole_keepsRole() = runBlocking {
+        val fakeAiMaskDao = RecordingAiMaskDao(
+            initialMasks = listOf(defaultMask(id = 1, updatedAt = 10))
+        )
+        val repository = createRepository(fakeAiMaskDao.dao)
+
+        repository.deletePermanently(1)
+
+        assertEquals(listOf(1), fakeAiMaskDao.defaultMasks.map { it.id })
+    }
+
     private fun createRepository(
         aiMaskDao: AiMaskDao,
         chatRoomDao: ChatRoomDao = RecordingChatRoomDao(emptyList()).dao,
@@ -145,6 +157,7 @@ class AiMaskRepositoryImplTest {
                 "getArchived" -> getArchived()
                 "getDefault" -> getDefault()
                 "getDefaults" -> defaultMasks
+                "getById" -> getById((args[0] as Number).toInt())
                 "insert" -> insert(args[0] as AiMask)
                 "insertDefaultIfMissing" -> {
                     insertDefaultIfMissing(
@@ -198,6 +211,12 @@ class AiMaskRepositoryImplTest {
                 }
             }
             return result
+        }
+
+        private fun getById(id: Int): AiMask? {
+            return synchronized(lock) {
+                masks.firstOrNull { it.id == id }
+            }
         }
 
         private fun insert(mask: AiMask): Long {

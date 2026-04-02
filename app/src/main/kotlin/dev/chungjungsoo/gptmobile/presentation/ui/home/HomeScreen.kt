@@ -9,8 +9,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -26,12 +29,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -42,6 +48,8 @@ import dev.chungjungsoo.gptmobile.data.database.entity.AiMask
 import dev.chungjungsoo.gptmobile.data.database.entity.ChatRoom
 import dev.chungjungsoo.gptmobile.data.model.RoleGroup
 
+const val HOME_DEFAULT_ROLE_QUICK_LAUNCH_TAG = "home_default_role_quick_launch"
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -51,7 +59,15 @@ fun HomeScreen(
     roleManagerOnClick: () -> Unit,
     onChatResolved: (ChatRoom) -> Unit
 ) {
-    val uiState = homeViewModel.uiState.collectAsStateWithLifecycle()
+    val uiState by homeViewModel.uiState.collectAsStateWithLifecycle()
+    val defaultRole = uiState.roleGroups
+        .asSequence()
+        .flatMap { group -> group.roles.asSequence() }
+        .firstOrNull { role -> role.isDefault }
+    val visibleRoleGroups = uiState.roleGroups.mapNotNull { group ->
+        val visibleRoles = group.roles.filterNot { role -> role.isDefault }
+        visibleRoles.takeIf { it.isNotEmpty() }?.let { group.copy(roles = it) }
+    }
 
     LaunchedEffect(Unit) {
         homeViewModel.refresh()
@@ -73,6 +89,14 @@ fun HomeScreen(
                 }
             )
         },
+        bottomBar = {
+            defaultRole?.let { role ->
+                DefaultRoleQuickLaunchBar(
+                    role = role,
+                    onClick = { homeViewModel.openRole(role.id, onChatResolved) }
+                )
+            }
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = roleManagerOnClick,
@@ -86,7 +110,7 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (uiState.value.isLoading) {
+            if (uiState.isLoading) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
             }
 
@@ -96,7 +120,7 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 items(
-                    items = uiState.value.roleGroups,
+                    items = visibleRoleGroups,
                     key = { group -> "${group.groupName}_${group.roles.joinToString("_") { it.id.toString() }}" }
                 ) { group ->
                     RoleGroupSection(
@@ -104,6 +128,66 @@ fun HomeScreen(
                         onRoleClick = { role -> homeViewModel.openRole(role.id, onChatResolved) }
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DefaultRoleQuickLaunchBar(
+    role: AiMask,
+    onClick: () -> Unit
+) {
+    Surface(
+        tonalElevation = 3.dp,
+        shadowElevation = 6.dp
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .testTag(HOME_DEFAULT_ROLE_QUICK_LAUNCH_TAG)
+                .clickable(onClick = onClick),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = role.name,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = role.systemPrompt.ifBlank { stringResource(R.string.default_role_description) },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.default_role_badge),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
     }
