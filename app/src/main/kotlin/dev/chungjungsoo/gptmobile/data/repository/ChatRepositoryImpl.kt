@@ -216,10 +216,18 @@ class ChatRepositoryImpl @Inject constructor(
         }
 
         if (existingChat != null) {
+            val syncedChat = existingChat.copy(
+                title = if (resolvedRole.isDefault) RoleDefaults.DEFAULT_ROLE_NAME else existingChat.title,
+                maskName = resolvedRole.name,
+                systemPrompt = resolvedRole.systemPrompt.takeIf { it.isNotBlank() }
+            )
+            if (syncedChat != existingChat) {
+                chatRoomDao.editChatRoom(syncedChat)
+            }
             if (!resolvedRole.isDefault) {
                 aiMaskRepository.touch(resolvedRole.id)
             }
-            return existingChat
+            return syncedChat
         }
 
         val newChat = ChatRoom(

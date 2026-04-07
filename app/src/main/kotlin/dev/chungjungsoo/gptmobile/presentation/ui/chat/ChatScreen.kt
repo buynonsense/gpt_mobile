@@ -546,12 +546,7 @@ fun ChatScreen(
                 }
             }
 
-            AnimatedVisibility(
-                modifier = Modifier.align(Alignment.BottomCenter),
-                visible = isBarsVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
-            ) {
+            Box(modifier = Modifier.align(Alignment.BottomCenter)) {
                 ChatInputBox(
                     value = question,
                     onValueChange = { s -> chatViewModel.updateQuestion(s) },
