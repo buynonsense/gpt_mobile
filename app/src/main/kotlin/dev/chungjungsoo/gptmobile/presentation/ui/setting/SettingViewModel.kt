@@ -38,6 +38,10 @@ class SettingViewModel @Inject constructor(
     val isFetchingModels: StateFlow<Boolean> = _isFetchingModels.asStateFlow()
 
     init {
+        refreshSettings()
+    }
+
+    fun refreshSettings() {
         fetchPlatformStatus()
         fetchStreamingStyle()
     }

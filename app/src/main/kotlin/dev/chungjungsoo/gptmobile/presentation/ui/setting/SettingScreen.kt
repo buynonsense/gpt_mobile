@@ -21,6 +21,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -61,6 +62,10 @@ fun SettingScreen(
         canScroll = { scrollState.canScrollForward || scrollState.canScrollBackward }
     )
     val dialogState by settingViewModel.dialogState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(settingViewModel) {
+        settingViewModel.refreshSettings()
+    }
 
     Scaffold(
         modifier = modifier

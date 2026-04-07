@@ -2,7 +2,6 @@ package dev.chungjungsoo.gptmobile.presentation.ui.startscreen
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -40,7 +39,6 @@ fun StartScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             StartScreenLogo()
-            Spacer(modifier = Modifier.weight(1f))
             WelcomeText()
             PrimaryLongButton(
                 onClick = onStartClick,

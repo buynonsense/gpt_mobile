@@ -21,6 +21,7 @@ import dev.chungjungsoo.gptmobile.data.sync.model.BackupFile
 import dev.chungjungsoo.gptmobile.data.sync.model.BackupPayload
 import dev.chungjungsoo.gptmobile.data.sync.model.SyncStatusSnapshot
 import dev.chungjungsoo.gptmobile.data.sync.model.WebDavConfig
+import dev.chungjungsoo.gptmobile.data.sync.model.toPlatform
 import java.lang.reflect.Proxy
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -84,6 +85,27 @@ class BackupRepositoryImplTest {
 
         assertEquals(1, backup.schemaVersion)
         assertTrue(backup.payload.settings.platforms.isNotEmpty() || backup.payload.settings.platforms.isEmpty())
+    }
+
+    @Test
+    fun exportBackup_includesPlatformConfigurationFields() = runBlocking {
+        val platform = Platform(
+            name = ApiType.OPENAI,
+            selected = true,
+            enabled = true,
+            apiUrl = "https://openrouter.example/v1/",
+            token = "openai-secret",
+            model = "gpt-4.1",
+            temperature = 0.4f,
+            topP = 0.8f,
+            systemPrompt = "你是专业助手"
+        )
+        val repository = createRepository(platforms = listOf(platform))
+
+        val backup = repository.exportBackup()
+
+        val restoredPlatforms = backup.payload.settings.platforms.map { backupPlatform -> backupPlatform.toPlatform() }
+        assertEquals(listOf(platform), restoredPlatforms)
     }
 
     @Test
@@ -197,6 +219,34 @@ class BackupRepositoryImplTest {
         assertEquals(listOf(targetPlatform), fakeSettingRepository.updatedPlatforms)
         assertEquals(targetTheme, fakeSettingRepository.updatedThemes)
         assertEquals(targetStreamingStyle, fakeSettingRepository.updatedStreamingStyle)
+    }
+
+    @Test
+    fun restoreBackup_restoresPlatformConfigurationFields() = runBlocking {
+        val targetPlatform = Platform(
+            name = ApiType.OPENAI,
+            selected = true,
+            enabled = true,
+            apiUrl = "https://custom-openai.example/v1/",
+            token = "restored-secret",
+            model = "gpt-4o",
+            temperature = 1.3f,
+            topP = 0.6f,
+            systemPrompt = "恢复后的系统提示词"
+        )
+        val backupJson = createRepository(platforms = listOf(targetPlatform)).exportBackup().toJson()
+        val fakeSettingRepository = RecordingSettingRepository()
+        val repository = BackupRepositoryImpl(
+            chatRoomDao = createMutableChatRoomDao(emptyList()).dao,
+            messageDao = createMutableMessageDao(emptyList()).dao,
+            aiMaskDao = createMutableAiMaskDao(emptyList()).dao,
+            settingRepository = fakeSettingRepository,
+            restoreTransactionRunner = SnapshotBackupRestoreTransactionRunner()
+        )
+
+        repository.restoreBackup(backupJson)
+
+        assertEquals(listOf(targetPlatform), fakeSettingRepository.updatedPlatforms)
     }
 
     @Test
