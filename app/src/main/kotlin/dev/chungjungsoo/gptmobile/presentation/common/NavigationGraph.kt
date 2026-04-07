@@ -87,7 +87,14 @@ fun NavGraphBuilder.searchNavigation(navController: NavHostController) {
 
 fun NavGraphBuilder.startScreenNavigation(navController: NavHostController) {
     composable(Route.GET_STARTED) {
-        StartScreen { navController.navigate(Route.SETUP_ROUTE) }
+        StartScreen(
+            onStartClick = { navController.navigate(Route.SETUP_ROUTE) },
+            onSkipClick = {
+                navController.navigate(Route.CHAT_LIST) {
+                    popUpTo(Route.GET_STARTED) { inclusive = true }
+                }
+            }
+        )
     }
 }
 

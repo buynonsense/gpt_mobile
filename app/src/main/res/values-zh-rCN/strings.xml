@@ -5,6 +5,7 @@
     <string name="welcome_title">最好的AI助理，\n你可以在你的手机上用它。</string>
     <string name="welcome_description">选择一个最适合你的模型，问一切你想问的!</string>
     <string name="get_started">开始使用</string>
+    <string name="skip_setup">暂时跳过</string>
     <string name="platform_select_description">选择您要使用的平台，也可以稍后在设置中更改。更多平台将要被支持。</string>
     <string name="sample_item_title">项目 1</string>
     <string name="sample_item_description">项目描述</string>
