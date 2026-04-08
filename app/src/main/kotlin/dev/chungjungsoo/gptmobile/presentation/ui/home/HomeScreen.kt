@@ -200,7 +200,7 @@ private fun RoleGroupSection(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        group.roles.chunked(3).forEach { rowRoles ->
+        group.roles.chunked(2).forEach { rowRoles ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -212,7 +212,7 @@ private fun RoleGroupSection(
                         onClick = { onRoleClick(role) }
                     )
                 }
-                repeat(3 - rowRoles.size) {
+                repeat(2 - rowRoles.size) {
                     Box(modifier = Modifier.weight(1f))
                 }
             }

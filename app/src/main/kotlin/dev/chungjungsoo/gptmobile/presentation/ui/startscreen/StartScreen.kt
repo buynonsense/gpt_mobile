@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -62,8 +63,9 @@ fun StartScreenLogo(modifier: Modifier = Modifier) {
         contentDescription = stringResource(R.string.gpt_mobile_introduction_logo),
         contentScale = ContentScale.FillHeight,
         modifier = modifier
-            .padding(top = 50.dp)
-            .height(400.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 24.dp, vertical = 24.dp)
+            .heightIn(max = 260.dp)
     )
 }
 
